@@ -1,0 +1,63 @@
+{
+    "name"  : "CMU",
+    "url"   : "www.accad.Accad.edu/research/mocap/mocap_data.htm",
+    
+    "armature" : {
+        "hips" : "hips",
+	    "tospine" : "spine",
+	    "spine" : "spine-1",
+	    "spine1" : "chest",
+	    "neck" : "neck",
+	    "head" : "head", 
+
+	    "leftshoulder" : "shoulder.L",
+	    "leftarm" : "upper_arm.L", 
+	    "leftforearm" : "forearm.L",
+	    "lefthand" : "hand.L",
+
+	    "rightshoulder" : "shoulder.R",
+	    "rightarm" : "upper_arm.R",
+	    "rightforearm" : "forearm.R",
+    	"righthand" : "hand.R",
+
+	    "leftupleg" : "thigh.L",
+    	"leftleg" : "shin.L",
+	    "leftfoot" : "foot.L", 
+	    "lefttoebase" : "toe.L",
+
+	    "rightupleg" : "thigh.R",
+	    "rightleg" : "shin.R",
+	    "rightfoot" : "foot.R", 
+	    "righttoebase" : "toe.R"
+    },
+    
+    "t-pose" : [
+        [
+            "LeftUpLeg",
+            [0.98481, -0.059391, 0, 0.16318]
+        ],
+        [
+            "LeftFoot",
+            [0.98481, -1.9207e-06, -0.17365, 0]
+        ],
+        [
+            "LeftToeBase",
+            [0.34239, -0.049454, -0.9381, 0.017106]
+        ],
+        [
+            "RightUpLeg",
+            [0.98481, -0.059391, 0, -0.16318]
+        ],
+        [
+            "RightFoot",
+            [0.98323, -0.0021406, 0.18234, -0.0026579]
+        ],
+        [
+            "RightToeBase",
+            [0.34239, -0.049454, 0.9381, -0.017105]
+        ]
+    ]
+}
+
+
+
