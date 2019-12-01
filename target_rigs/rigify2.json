@@ -27,7 +27,7 @@
 	    "thigh_fk.R" : "thigh.R",
     	"shin_fk.R" : "shin.R",
 	    "foot_fk.R" : "foot.R", 
-	    "toe.R" : "toe.R",
+	    "toe.R" : "toe.R"
     },
     
     "ik-bones" : []

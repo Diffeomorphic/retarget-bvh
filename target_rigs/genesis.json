@@ -3,7 +3,7 @@
     "url"   : "www.daz3d.com",
     
     "bones" : {
-        "hips" : "hips",
+        "hip" : "hips",
 	    "abdomen" : "spine",
 	    "abdomen2" : "spine-1",
 	    "chest" : "chest",
@@ -12,16 +12,16 @@
 
 	    "lCollar" : "shoulder.L",
 	    "lShldr" : "upper_arm.L", 
-	    "lForearm" : "forearm.L",
+	    "lForeArm" : "forearm.L",
 	    "lHand" : "hand.L",
 
 	    "rCollar" : "shoulder.R",
 	    "rShldr" : "upper_arm.R",
-	    "rForearm" : "forearm.R",
+	    "rForeArm" : "forearm.R",
     	"rHand" : "hand.R",
 
-	    "rThigh" : "thigh.L",
-    	"rShin" : "shin.L",
+	    "lThigh" : "thigh.L",
+    	"lShin" : "shin.L",
 	    "lFoot" : "foot.L", 
 	    "lToe" : "toe.L",
 

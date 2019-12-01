@@ -3,7 +3,7 @@
     "url"   : "www.daz3d.com",
     
     "bones" : {
-        "hips" : "hips",
+        "hip" : "hips",
 	    "abdomenLower" : "spine",
 	    "abdomenUpper" : "spine-1",
 	    "chestLower" : "chest",
@@ -20,8 +20,8 @@
 	    "rForearmBend" : "forearm.R",
     	"rHand" : "hand.R",
 
-	    "rThighBend" : "thigh.L",
-    	"rShin" : "shin.L",
+	    "lThighBend" : "thigh.L",
+    	"lShin" : "shin.L",
 	    "lFoot" : "foot.L", 
 	    "lToe" : "toe.L",
 
@@ -68,7 +68,7 @@
 	    
 	    "rPinky1" : "rPinky1",
 	    "rPinky2" : "rPinky2",
-	    "rPinky3" : "rPinky3",
+	    "rPinky3" : "rPinky3"
     },
     
     "ik-bones" : []

@@ -26,8 +26,6 @@
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # ------------------------------------------------------------------------------
 
-
-
 """
 Abstract
 Tool for loading bvh files onto the MHX rig in Blender 2.5x
@@ -40,19 +38,19 @@ Alternatively, run the script in the script editor (Alt-P), and access from UI p
 """
 
 bl_info = {
-    "name": "MakeWalk",
+    "name": "Retarget BVH",
     "author": "Thomas Larsson",
-    "version": (1,6),
+    "version": (2,0),
     "blender": (2,80,0),
-    "location": "View3D > Tools > MakeWalk",
+    "location": "View3D > Tools > Retarget BVH",
     "description": "Mocap retargeting tool",
     "warning": "",
-    'wiki_url': "http://thomasmakehuman.wordpress.com/makewalk/",
-    "category": "MakeHuman"}
+    'wiki_url': "http://diffeomorphic.blogspot.com/retarget-bvh/",
+    "category": "Animation"}
 
 # To support reload properly, try to access a package var, if it's there, reload everything
 if "bpy" in locals():
-    print("Reloading MakeWalk")
+    print("Reloading BVH Retargeter")
     import imp
     imp.reload(utils)
     if bpy.app.version < (2,80,0):
@@ -74,7 +72,7 @@ if "bpy" in locals():
     imp.reload(edit)
     imp.reload(floor)
 else:
-    print("Loading MakeWalk")
+    print("Loading BVH Retargeter")
     import bpy
 
     from . import utils
@@ -113,8 +111,8 @@ def inset(layout):
 #
 
 class MCP_PT_Main(bpy.types.Panel):
-    bl_category = "MakeWalk"
-    bl_label = "MakeWalk v %d.%d: Main" % bl_info["version"]
+    bl_category = "Retarget BVH"
+    bl_label = "Retarget BVH v %d.%d: Main" % bl_info["version"]
     bl_space_type = "VIEW_3D"
     bl_region_type = Region
 
@@ -148,7 +146,7 @@ class MCP_PT_Main(bpy.types.Panel):
 #
 
 class MCP_PT_Options(bpy.types.Panel):
-    bl_category = "MakeWalk"
+    bl_category = "Retarget BVH"
     bl_label = "Options"
     bl_space_type = "VIEW_3D"
     bl_region_type = Region
@@ -200,7 +198,7 @@ class MCP_PT_Options(bpy.types.Panel):
 #
 
 class MCP_PT_Edit(bpy.types.Panel):
-    bl_category = "MakeWalk"
+    bl_category = "Retarget BVH"
     bl_label = "Edit Actions"
     bl_space_type = "VIEW_3D"
     bl_region_type = Region
@@ -341,7 +339,7 @@ class MCP_PT_Edit(bpy.types.Panel):
 #
 
 class MCP_PT_MhxSourceBones(bpy.types.Panel):
-    bl_category = "MakeWalk"
+    bl_category = "Retarget BVH"
     bl_label = "Source armature"
     bl_space_type = "VIEW_3D"
     bl_region_type = Region
@@ -387,7 +385,7 @@ class MCP_PT_MhxSourceBones(bpy.types.Panel):
 #
 
 class MCP_PT_MhxTargetBones(bpy.types.Panel):
-    bl_category = "MakeWalk"
+    bl_category = "Retarget BVH"
     bl_label = "Target armature"
     bl_space_type = "VIEW_3D"
     bl_region_type = Region
@@ -470,7 +468,7 @@ class MCP_PT_MhxTargetBones(bpy.types.Panel):
 #
 
 class MCP_PT_Utility(bpy.types.Panel):
-    bl_category = "MakeWalk"
+    bl_category = "Retarget BVH"
     bl_label = "Utilities"
     bl_space_type = "VIEW_3D"
     bl_region_type = Region
@@ -585,5 +583,5 @@ def unregister():
 if __name__ == "__main__":
     register()
 
-print("MakeWalk loaded")
+print("BVH Retargeter loaded")
 

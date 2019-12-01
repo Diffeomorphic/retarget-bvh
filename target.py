@@ -242,7 +242,7 @@ def initTargets(scn):
     for fname in os.listdir(path):
         file = os.path.join(path, fname)
         (name, ext) = os.path.splitext(fname)
-        if ext == ".trg" and os.path.isfile(file):
+        if ext == ".json" and os.path.isfile(file):
             (name, stuff) = readTrgArmature(file, name)
             _targetInfo[name] = stuff
 
@@ -260,41 +260,23 @@ def initTargets(scn):
     return
 
 
-def readTrgArmature(file, name):
-    print("Read target file", file)
-    fp = open(file, "r")
-    status = 0
-    bones = []
-    tpose = ""
-    ikbones = []
-    bendtwist = []
-    for line in fp:
-        words = line.split()
-        if len(words) > 0:
-            key = words[0].lower()
-            if key[0] == "#":
-                continue
-            elif key == "name:":
-                name = words[1]
-            elif key == "bones:":
-                status = 1
-            elif key == "ikbones:":
-                status = 2
-            elif key == "bendtwist:":
-                status = 3
-            elif key == "t-pose:":
-                status = 0
-                tpose = os.path.join("target_rigs", words[1])
-            elif len(words) != 2:
-                print("Ignored illegal line", line)
-            elif status == 1:
-                bones.append( (words[0], nameOrNone(words[1])) )
-            elif status == 2:
-                ikbones.append( (words[0], nameOrNone(words[1])) )
-            elif status == 3:
-                bendtwist.append( (words[0], nameOrNone(words[1])) )
-
-    fp.close()
+def readTrgArmature(filepath, name):
+    import json
+    print("Read target file", filepath)
+    with open(filepath, "r") as fp:
+        struct = json.load(fp)
+    name = struct["name"]
+    bones = [(key, nameOrNone(value)) for key,value in struct["bones"].items()]
+    ikbones = []    
+    if "ikbones" in struct.keys():
+        ikbones = [(key, nameOrNone(value)) for key,value in struct["ikbones"].items()]
+    if "t-pose" in struct.keys():
+        tpose = filepath
+    else:
+        tpose = ""
+    bendtwist = []    
+    if "bendtwist" in struct.keys():
+        bendtwist = [(key, nameOrNone(value)) for key,value in struct["bendtwist"].items()]
     return (name, (bones,ikbones,tpose,bendtwist))
 
 

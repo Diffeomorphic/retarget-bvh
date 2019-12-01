@@ -26,8 +26,6 @@
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # ------------------------------------------------------------------------------
 
-
-
 import bpy
 from mathutils import Vector, Matrix
 from bpy.props import *
@@ -626,6 +624,8 @@ def limbsBendPositive(rig, doElbows, doKnees, frames):
 
 
 def minimizeFCurve(pb, rig, index, frames):
+    if pb is None:
+        return
     fcu = findBoneFCurve(pb, rig, index)
     if fcu is None:
         return
