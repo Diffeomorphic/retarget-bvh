@@ -535,6 +535,7 @@ class MCP_OT_ShiftBoneFCurves(HideOperator, IsArmature):
             deltaMat[pb.name] = pb.matrix_basis @ bmat.inverted()
             orders[pb.name], locks[pb.name] = getLocks(pb, context)
 
+        objects = detachRig(rig)      # speed-up, exclude modifier from meshes
         for n,frame in enumerate(frames[1:]):
             scn.frame_set(frame)
             showProgress(n, frame, nFrames)
@@ -546,6 +547,7 @@ class MCP_OT_ShiftBoneFCurves(HideOperator, IsArmature):
                     insertLocation(pb, mat)
                 insertRotation(pb, mat)
 
+        attachRig(rig, objects)   # include it again
         raise MocapMessage("Animation shifted")
 
 

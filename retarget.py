@@ -335,6 +335,7 @@ class Retargeter:
 
         setSourceArmature(srcRig, scn)
         print("Retarget %s --> %s" % (srcRig.name, trgRig.name))
+        objects = detachRig(trgRig)      # speed-up, exclude modifier from meshes
 
         info = findTargetArmature(context, trgRig, self.useAutoTarget)
         anim = CAnimation(srcRig, trgRig, info, context)
@@ -358,6 +359,8 @@ class Retargeter:
         act = trgRig.animation_data.action
         act.name = trgRig.name[:4] + srcRig.name[2:]
         act.use_fake_user = True
+        attachRig(trgRig, objects)   # include it again
+
         endProgress("Retargeted %s --> %s" % (srcRig.name, trgRig.name))
         return act,nFrames
 

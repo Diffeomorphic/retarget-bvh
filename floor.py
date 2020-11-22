@@ -247,6 +247,7 @@ class MCP_OT_FloorFoot(BvhPropsOperator, IsArmature, Target):
         self.findTarget(context, context.object)
         scn = context.scene
         rig,plane = getRigAndPlane(context)
+        objects = detachRig(rig)      # speed-up, exclude modifier from meshes
         try:
             useIk = rig["MhaLegIk_L"] or rig["MhaLegIk_R"]
         except KeyError:
@@ -256,6 +257,8 @@ class MCP_OT_FloorFoot(BvhPropsOperator, IsArmature, Target):
             self.floorIkFoot(rig, plane, scn, frames)
         else:
             self.floorFkFoot(rig, plane, scn, frames)
+
+        attachRig(rig, objects)   # include it again
         raise MocapMessage("Feet kept above floor")
 
 

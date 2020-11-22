@@ -97,6 +97,26 @@ def isRigify2(rig):
     return hasAllBones(["MCH-forearm_ik.L"], rig)
 
 #
+# Attach and detach rig
+#
+def detachRig(rig):
+    objects = []
+    for obj in bpy.data.objects:
+        for modifier in obj.modifiers:
+            if (modifier.type == 'ARMATURE'):
+                if modifier.object == rig:
+                    if obj not in objects:      # Armature may be used with e.g. keep volume/no volume twice
+                        objects.append(obj)     # save object only once
+                    modifier.object = None
+    return objects
+
+def attachRig(rig, objects):
+    for obj in objects:
+        for modifier in obj.modifiers:
+            if (modifier.type == 'ARMATURE'):
+                if modifier.object is None:
+                    modifier.object = rig
+#
 #   nameOrNone(string):
 #
 
