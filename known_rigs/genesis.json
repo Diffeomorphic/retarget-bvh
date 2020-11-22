@@ -1,0 +1,88 @@
+{
+    "name"  : "Genesis 1,2",
+    "url"   : "www.daz3d.com",
+    "fingerprint" : ["abdomen2", "lShldr"],
+    
+    "bones" : {
+        "hip" : "hips",
+        "abdomen" : "spine",
+        "abdomen2" : "spine-1",
+        "chest" : "chest",
+        "neck" : "neck",
+        "head" : "head", 
+
+        "lCollar" : "shoulder.L",
+        "lShldr" : "upper_arm.L", 
+        "lForeArm" : "forearm.L",
+        "lHand" : "hand.L",
+
+        "rCollar" : "shoulder.R",
+        "rShldr" : "upper_arm.R",
+        "rForeArm" : "forearm.R",
+        "rHand" : "hand.R",
+
+        "lThigh" : "thigh.L",
+        "lShin" : "shin.L",
+        "lFoot" : "foot.L", 
+        "lToe" : "toe.L",
+
+        "rThigh" : "thigh.R",
+        "rShin" : "shin.R",
+        "rFoot" : "foot.R", 
+        "rToe" : "toe.R",
+
+        "lCarpal1" : "f_carpal2.L",
+        "lCarpal2" : "f_carpal3.L",
+        
+        "lThumb1" : "f_thumb.01.L",
+        "lThumb2" : "f_thumb.02.L",
+        "lThumb3" : "f_thumb.03.L",
+        
+        "lIndex1" : "f_index.01.L",
+        "lIndex2" : "f_index.02.L",
+        "lIndex3" : "f_index.03.L",
+        
+        "lMid1" : "f_middle.01.L",
+        "lMid2" : "f_middle.02.L",
+        "lMid3" : "f_middle.03.L",
+        
+        "lRing1" : "f_ring.01.L",
+        "lRing2" : "f_ring.02.L",
+        "lRing3" : "f_ring.03.L",
+        
+        "lPinky1" : "f_pinky.01.L",
+        "lPinky2" : "f_pinky.02.L",
+        "lPinky3" : "f_pinky.03.L",    
+
+        "rCarpal1" : "f_carpal2.R",
+        "rCarpal2" : "f_carpal3.R",
+        
+        "rThumb1" : "f_thumb.01.R",
+        "rThumb2" : "f_thumb.02.R",
+        "rThumb3" : "f_thumb.03.R",
+        
+        "rIndex1" : "f_index.01.R",
+        "rIndex2" : "f_index.02.R",
+        "rIndex3" : "f_index.03.R",
+        
+        "rMid1" : "f_middle.01.R",
+        "rMid2" : "f_middle.02.R",
+        "rMid3" : "f_middle.03.R",
+        
+        "rRing1" : "f_ring.01.R",
+        "rRing2" : "f_ring.02.R",
+        "rRing3" : "f_ring.03.R",
+        
+        "rPinky1" : "f_pinky.01.R",
+        "rPinky2" : "f_pinky.02.R",
+        "rPinky3" : "f_pinky.03.R"
+    },
+    
+    "optional" : [],
+    
+    "parents" : {
+    }
+}
+
+
+

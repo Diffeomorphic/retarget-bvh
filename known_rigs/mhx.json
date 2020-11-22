@@ -1,0 +1,122 @@
+{
+    "name"  : "MHX (Legacy)",
+    "url"   : "www.makehuman.org",
+    "fingerprint" : ["foot.rev.L"],
+    
+    "bones" : {
+        "root" : "hips",
+        "spine" : "spine",
+        "spine-1" : "spine-1",
+        "chest-1" : "chest",
+        "neck" : "neck",
+        "head" : "head", 
+
+        "clavicle.L" : "shoulder.L",
+        "upper_arm.fk.L" : "upper_arm.L", 
+        "forearm.fk.L" : "forearm.L",
+        "hand.fk.L" : "hand.L",
+        
+        "clavicle.R" : "shoulder.R",
+        "upper_arm.fk.R" : "upper_arm.R", 
+        "forearm.fk.R" : "forearm.R",
+        "hand.fk.R" : "hand.R",
+
+        "thigh.fk.L" : "thigh.L",
+        "shin.fk.L" : "shin.L",
+        "foot.fk.L" : "foot.L", 
+        "toe.fk.L" : "toe.L",
+
+        "thigh.fk.R" : "thigh.R",
+        "shin.fk.R" : "shin.R",
+        "foot.fk.R" : "foot.R", 
+        "toe.fk.R" : "toe.R",
+        
+        "thumb.01.L" : "f_thumb.01.L",
+        "thumb.02.L" : "f_thumb.02.L",
+        "thumb.03.L" : "f_thumb.03.L",
+        
+        "f_index.01.L" : "f_index.01.L",
+        "f_index.02.L" : "f_index.02.L",
+        "f_index.03.L" : "f_index.03.L",
+        
+        "f_middle.01.L" : "f_middle.01.L",
+        "f_middle.02.L" : "f_middle.02.L",
+        "f_middle.03.L" : "f_middle.03.L",
+        
+        "f_ring.01.L" : "f_ring.01.L",
+        "f_ring.02.L" : "f_ring.02.L",
+        "f_ring.03.L" : "f_ring.03.L",
+        
+        "f_pinky.01.L" : "f_pinky.01.L",
+        "f_pinky.02.L" : "f_pinky.02.L",
+        "f_pinky.03.L" : "f_pinky.03.L",
+        
+        "thumb.01.R" : "f_thumb.01.R",
+        "thumb.02.R" : "f_thumb.02.R",
+        "thumb.03.R" : "f_thumb.03.R",
+        
+        "f_index.01.R" : "f_index.01.R",
+        "f_index.02.R" : "f_index.02.R",
+        "f_index.03.R" : "f_index.03.R",
+        
+        "f_middle.01.R" : "f_middle.01.R",
+        "f_middle.02.R" : "f_middle.02.R",
+        "f_middle.03.R" : "f_middle.03.R",
+        
+        "f_ring.01.R" : "f_ring.01.R",
+        "f_ring.02.R" : "f_ring.02.R",
+        "f_ring.03.R" : "f_ring.03.R",
+        
+        "f_pinky.01.R" : "f_pinky.01.R",
+        "f_pinky.02.R" : "f_pinky.02.R",
+        "f_pinky.03.R" : "f_pinky.03.R"
+
+    },
+        
+    "optional" : [],
+    
+    "parents" : {
+        "root" : "",
+        "spine" : "root",
+        "spine-1" : "spine",
+        "chest-1" : "spine-1",
+        "neck" : "chest-1",
+        "head" : "neck", 
+
+        "clavicle.L" : "chest-1",
+        "upper_arm.fk.L" : "clavicle.L", 
+        "forearm.fk.L" : "upper_arm.fk.L",
+        "hand.fk.L" : "forearm.fk.L",
+        
+        "clavicle.R" : "chest-1",
+        "upper_arm.fk.R" : "clavicle.R", 
+        "forearm.fk.R" : "upper_arm.fk.R",
+        "hand.fk.R" : "forearm.fk.R",
+
+        "thigh.fk.L" : "root",
+        "shin.fk.L" : "thigh.fk.L",
+        "foot.fk.L" : "shin.fk.L", 
+        "toe.fk.L" : "foot.fk.L",
+
+        "thigh.fk.R" : "root",
+        "shin.fk.R" : "thigh.fk.R",
+        "foot.fk.R" : "shin.fk.R", 
+        "toe.fk.R" : "foot.fk.R",
+        
+        "thumb.01.L" : "hand.fk.L",
+        "f_index.01.L" : "hand.fk.L",
+        "f_middle.01.L" : "hand.fk.L",
+        "f_ring.01.L" : "hand.fk.L",
+        "f_pinky.01.L" : "hand.fk.L",        
+        
+        "thumb.01.R" : "hand.fk.R",
+        "f_index.01.R" : "hand.fk.R",
+        "f_middle.01.R" : "hand.fk.R",
+        "f_ring.01.R" : "hand.fk.R",
+        "f_pinky.01.R" : "hand.fk.R"                
+    }
+    
+}
+
+
+

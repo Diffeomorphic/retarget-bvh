@@ -1,0 +1,41 @@
+{
+    "name"  : "CMU",
+    "url"   : "",
+    
+    "bones" : {
+        "Hips" : "hips",
+        "LowerBack" : "spine",
+        "Spine" : "spine-1",
+        "Neck" : "chest",
+        "Neck1" : "neck",
+        "Head" : "head", 
+
+        "LeftShoulder" : "shoulder.L",
+        "LeftArm" : "upper_arm.L", 
+        "LeftForeArm" : "forearm.L",
+        "LeftHand" : "hand.L",
+        "LThumb" : "f_thumb.01.L",
+        "LeftHandIndex1" : "f_index.01.L",
+
+        "RightShoulder" : "shoulder.R",
+        "RightArm" : "upper_arm.R",
+        "RightForeArm" : "forearm.R",
+        "RightHand" : "hand.R",
+        "RThumb" : "f_thumb.01.R",
+        "RightHandIndex1" : "f_index.01.R",
+
+        "LeftUpLeg" : "thigh.L",
+        "LeftLeg" : "shin.L",
+        "LeftFoot" : "foot.L", 
+        "LeftToeBase" : "toe.L",
+
+        "RightUpLeg" : "thigh.R",
+        "RightLeg" : "shin.R",
+        "RightFoot" : "foot.R", 
+        "RightToeBase" : "toe.R"
+    }
+
+}
+
+
+

@@ -1,2 +1,4 @@
-# makewalk
-Mocap retargeting for Blender
+# Retarget BVH
+
+Load and retarget BVH files for Blender.
+Formerly known as MakeWalk

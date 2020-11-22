@@ -1,0 +1,36 @@
+{
+    "name"  : "Mega",
+    "url"   : "",
+    
+    "bones" : {
+        "Hips" : "hips",
+        "UpperBack" : "spine",
+        "Chest" : "chest",
+        "Neck" : "neck",
+        "Neck1" : "head",
+
+        "LCollar" : "shoulder.L",
+        "LeftUpArm" : "upper_arm.L",
+        "LeftLowArm" : "forearm.L",
+        "LeftHand" : "hand.L",
+
+        "RCollar" : "shoulder.R",
+        "RightUpArm" : "upper_arm.R",
+        "RightLowArm" : "forearm.R",
+        "RightHand" : "hand.R",
+
+        "LeftUpLeg" : "thigh.L",
+        "LeftLowLeg" : "shin.L",
+        "LeftFoot" : "foot.L",
+        "LeftToes" : "toe.L",
+
+        "RightUpLeg" : "thigh.R",
+        "RightLowLeg" : "shin.R",
+        "RightFoot" : "foot.R",
+        "RightToes" : "toe.R"
+    }
+
+}
+
+
+

@@ -1,19 +1,19 @@
 # ------------------------------------------------------------------------------
 #   BSD 2-Clause License
-#   
-#   Copyright (c) 2019, Thomas Larsson
+#
+#   Copyright (c) 2019-2020, Thomas Larsson
 #   All rights reserved.
-#   
+#
 #   Redistribution and use in source and binary forms, with or without
 #   modification, are permitted provided that the following conditions are met:
-#   
+#
 #   1. Redistributions of source code must retain the above copyright notice, this
 #      list of conditions and the following disclaimer.
-#   
+#
 #   2. Redistributions in binary form must reproduce the above copyright notice,
 #      this list of conditions and the following disclaimer in the documentation
 #      and/or other materials provided with the distribution.
-#   
+#
 #   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 #   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 #   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -39,25 +39,23 @@ from .utils import *
 
 class CArmature:
 
-    def __init__(self):
+    def __init__(self, scn):
         self.name = "Automatic"
         self.boneNames = OrderedDict()
-        self.tposeFile = None
         self.rig = None
+        self.verbose = scn.McpVerbose
 
 
     def display(self, type):
+        if not self.verbose:
+            return
         print("%s Armature: %s" % (type, self.name))
         for bname,mhx in self.boneNames.items():
             print("  %14s %14s" % (bname, mhx))
 
 
-    def findArmature(self, rig, ignoreHiddenLayers=True):
-        if ignoreHiddenLayers:
-            self.rig = rig
-        else:
-            self.rig = None
-
+    def findArmature(self, rig):
+        self.rig = rig
         roots = []
         for pb in rig.pose.bones:
             if pb.parent is None:
@@ -67,10 +65,12 @@ class CArmature:
         nChildren = len(roots)
         first = True
         hips = None
+        self.clearBones()
         while first or nChildren != 3:
-            if not first and nChildren == 2 and rig.MhReverseHip:
+            if not first and nChildren == 2 and rig.McpReverseHip:
                 break
             elif nChildren == 0:
+                self.clearBones()
                 raise MocapError("Hip bone must have children: %s" % hips.name)
             elif nChildren == 1:
                 hips = hipsChildren[0]
@@ -87,19 +87,21 @@ class CArmature:
                 counts = self.getChildCount(hipsChildren)
                 hipsChildren = [counts[-3][2], counts[-2][2], counts[-1][2]]
                 nChildren = 3
-            if hips is not None:
+            if self.verbose and (hips is not None):
                 print("  Try hips: %s, children: %d" % (hips.name, nChildren))
             first = False
 
         if hips is None:
+            self.clearBones()
             raise MocapError("Found no candidate hip bone")
 
-        print("Mapping bones automatically:")
-        print("  hips:", hips.name)
+        if self.verbose:
+            print("Mapping bones automatically:")
+            print("  hips:", hips.name)
         self.setBone("hips", hips)
         hiphead,hiptail,_ = getHeadTailDir(hips)
 
-        if rig.MhReverseHip and len(hipsChildren) == 2:
+        if rig.McpReverseHip and len(hipsChildren) == 2:
             legroot = hipsChildren[1]
             spine = hipsChildren[0]
             _,terminal = self.chainEnd(legroot)
@@ -113,6 +115,7 @@ class CArmature:
             string = "Hips %s has %d children:\n" % (hips.name, len(hipsChildren))
             for child in hipsChildren:
                 string += "  %s\n" % child.name
+            self.clearBones()
             raise MocapError(string)
 
         spine = None
@@ -123,18 +126,19 @@ class CArmature:
         rightLegTail = hiptail
 
         limbs = []
-        for pb in hipsChildren:
+        for n,pb in enumerate(hipsChildren):
             _,terminal = self.chainEnd(pb)
             _,tail,_ = getHeadTailDir(terminal)
-            limbs.append((tail[0], pb))
+            limbs.append((tail[0], n, pb))
         limbs.sort()
-        _,rightLeg = limbs[0]
-        _,spine = limbs[1]
-        _,leftLeg = limbs[2]
+        rightLeg = limbs[0][2]
+        spine = limbs[1][2]
+        leftLeg = limbs[2][2]
 
-        print("  spine:", spine.name)
-        print("  right leg:", rightLeg.name)
-        print("  left leg:", leftLeg.name)
+        if self.verbose:
+            print("  spine:", spine.name)
+            print("  right leg:", rightLeg.name)
+            print("  left leg:", leftLeg.name)
         self.findSpine(spine)
         self.findLeg(leftLeg, ".L")
         self.findLeg(rightLeg, ".R")
@@ -145,6 +149,12 @@ class CArmature:
             return ("  No %s\n" % name)
         else:
             return ("  %s = %s, tail = %s\n" % (name, pb.name, tuple(tail)))
+
+
+    def clearBones(self):
+        for pb in self.rig.pose.bones:
+            pb.McpBone = ""
+        self.boneNames = {}
 
 
     def setBone(self, bname, pb):
@@ -179,19 +189,23 @@ class CArmature:
     def findLeg(self, hip, suffix):
         bnames = ["hip"+suffix, "thigh"+suffix, "shin"+suffix, "foot"+suffix, "toe"+suffix]
         prefnames = ["X", "X", "X", "foot", "toe"]
-        print("  hip%s:" % suffix, hip.name)
+        if self.verbose:
+            print("  hip%s:" % suffix, hip.name)
         try:
             thigh = self.validChildren(hip)[0]
         except IndexError:
+            self.clearBones()
             raise MocapError("Hip %s has no children" % hip.name)
         shins = self.validChildren(thigh, True)
         if len(shins) == 0:
+            self.clearBones()
             raise MocapError("Thigh %s has no children" % thigh.name)
         elif len(shins) > 1:
             shin = thigh
             thigh = hip
-            print("  thigh%s:" % suffix, thigh.name)
-            print("  shin%s:" % suffix, shin.name)
+            if self.verbose:
+                print("  thigh%s:" % suffix, thigh.name)
+                print("  shin%s:" % suffix, shin.name)
             bnames = bnames[1:]
             prefnames = prefnames[1:]
         else:
@@ -207,31 +221,38 @@ class CArmature:
                 feet = self.validChildren(shin)
                 if feet:
                     foot = feet[0]
-            print("  thigh%s:" % suffix, thigh.name)
-            print("  shin%s:" % suffix, shin.name)
-            if foot:
-                print("  foot%s:" % suffix, foot.name)
+            if self.verbose:
+                print("  thigh%s:" % suffix, thigh.name)
+                print("  shin%s:" % suffix, shin.name)
+                if foot:
+                    print("  foot%s:" % suffix, foot.name)
 
         self.findTerminal(hip, bnames, prefnames)
 
 
     def findArm(self, shoulder, suffix):
         bnames = ["shoulder"+suffix, "upper_arm"+suffix, "forearm"+suffix, "hand"+suffix]
-        print("  shoulder%s:" % suffix, shoulder.name)
+        if self.verbose:
+            print("  shoulder%s:" % suffix, shoulder.name)
         try:
             upperarm = self.validChildren(shoulder)[0]
         except IndexError:
+            self.clearBones()
             raise MocapError("Shoulder %s has no children" % shoulder.name)
-        print("  upper_arm%s:" % suffix, upperarm.name)
+        if self.verbose:
+            print("  upper_arm%s:" % suffix, upperarm.name)
         try:
             forearm = self.validChildren(upperarm, True)[0]
         except IndexError:
+            self.clearBones()
             raise MocapError("Upper arm %s has no children" % upperarm.name)
-        print("  forearm%s:" % suffix, forearm.name)
+        if self.verbose:
+            print("  forearm%s:" % suffix, forearm.name)
         hands = self.validChildren(forearm)
         if hands:
             hand = hands[0]
-            print("  hand%s:" % suffix, hand.name)
+            if self.verbose:
+                print("  hand%s:" % suffix, hand.name)
             if upperarm.bone.length < hand.bone.length:
                 bnames = ["shoulder"+suffix, ""] + bnames[1:]
         self.findTerminal(shoulder, bnames)
@@ -239,14 +260,16 @@ class CArmature:
 
     def findHead(self, neck):
         bnames = ["neck", "head"]
-        print("  neck:", neck.name)
+        if self.verbose:
+            print("  neck:", neck.name)
         self.findTerminal(neck, bnames)
 
 
     def findSpine(self, spine1):
         n,spine2 = self.spineEnd(spine1)
-        print("  spine:", spine1.name)
-        print("  chest:", spine2.name)
+        if self.verbose:
+            print("  spine:", spine1.name)
+            print("  chest:", spine2.name)
         if n == 1:
             bnames = ["spine"]
         elif n == 2:
@@ -264,14 +287,26 @@ class CArmature:
             for pb in spine2Children:
                 _,tail,_ = getHeadTailDir(pb)
                 limbs.append((tail[0],pb))
-            limbs.sort()
-            self.findArm(limbs[0][1], ".R")
-            self.findHead(limbs[1][1])
-            self.findArm(limbs[2][1], ".L")
+            try:
+                limbs.sort()
+                fail = False
+            except TypeError:
+                fail = True
+                reason = "Some of the bones have the same X coordinate\n"
+            if not fail:
+                self.findArm(limbs[0][1], ".R")
+                self.findHead(limbs[1][1])
+                self.findArm(limbs[2][1], ".L")
         else:
-            string = ("Could not auto-detect armature because:\nTop of spine %s has %d children:\n" % (spine2.name, len(spine2Children)))
+            fail = True
+            reason = "Top of spine %s has %d children\n" % (spine2.name, len(spine2Children))
+        if fail:
+            string = "Could not auto-detect armature because:\n" + reason
             for child in spine2Children:
                 string += "  %s\n" % child.name
+            string += ("Is the source rig oriented correctly?\n" +
+                       "Try to change vertical or horizonal orientation.")
+            self.clearBones()
             raise MocapError(string)
 
 
@@ -357,7 +392,9 @@ def validBone(pb, rig=None, muteIk=False):
 
 def getHeadTailDir(pb):
     mat = pb.bone.matrix_local
+    mat = pb.matrix
     head = Vector(mat.col[3][:3])
     vec = Vector(mat.col[1][:3])
     tail = head + pb.bone.length * vec
     return head, tail, vec
+

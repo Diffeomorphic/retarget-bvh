@@ -1,19 +1,19 @@
 # ------------------------------------------------------------------------------
 #   BSD 2-Clause License
-#   
-#   Copyright (c) 2019, Thomas Larsson
+#
+#   Copyright (c) 2019-2020, Thomas Larsson
 #   All rights reserved.
-#   
+#
 #   Redistribution and use in source and binary forms, with or without
 #   modification, are permitted provided that the following conditions are met:
-#   
+#
 #   1. Redistributions of source code must retain the above copyright notice, this
 #      list of conditions and the following disclaimer.
-#   
+#
 #   2. Redistributions in binary form must reproduce the above copyright notice,
 #      this list of conditions and the following disclaimer in the documentation
 #      and/or other materials provided with the distribution.
-#   
+#
 #   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 #   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 #   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -29,35 +29,109 @@
 import bpy
 from mathutils import Vector, Matrix
 from bpy.props import *
-
 from .utils import *
-if bpy.app.version < (2,80,0):
-    from .buttons27 import TypeString
-else:
-    from .buttons28 import TypeString
+from .target import Target
+
+#-------------------------------------------------------------
+#   Limbs bend positive
+#-------------------------------------------------------------
+
+class Bender:
+    useElbows : BoolProperty(
+        name="Elbows",
+        description="Keep elbow bending positive",
+        default=True)
+
+    useKnees : BoolProperty(
+        name="Knees",
+        description="Keep knee bending positive",
+        default=True)
+
+    useBendPositive : BoolProperty(
+        name="Bend Positive",
+        description="Ensure that elbow and knee bending is positive",
+        default=True)
+
+    def draw(self, context):
+        self.layout.prop(self, "useElbows")
+        self.layout.prop(self, "useKnees")
+
+    def limbsBendPositive(self, rig, frames):
+        limbs = {}
+        if self.useElbows:
+            pb = getTrgBone("forearm.L", rig)
+            self.minimizeFCurve(pb, rig, 0, frames)
+            pb = getTrgBone("forearm.R", rig)
+            self.minimizeFCurve(pb, rig, 0, frames)
+        if self.useKnees:
+            pb = getTrgBone("shin.L", rig)
+            self.minimizeFCurve(pb, rig, 0, frames)
+            pb = getTrgBone("shin.R", rig)
+            self.minimizeFCurve(pb, rig, 0, frames)
 
 
-def updateScene():
-    bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.ops.object.mode_set(mode='POSE')
+    def minimizeFCurve(self, pb, rig, index, frames):
+        from .floor import findBoneFCurve
+        if pb is None:
+            return
+        fcu = findBoneFCurve(pb, rig, index)
+        if fcu is None:
+            return
+        y0 = fcu.evaluate(0)
+        t0 = frames[0]
+        t1 = frames[-1]
+        for kp in fcu.keyframe_points:
+            t = kp.co[0]
+            if t >= t0 and t <= t1:
+                y = kp.co[1]
+                if y < y0:
+                    kp.co[1] = y0
 
+
+class MCP_OT_LimbsBendPositive(BvhPropsOperator, IsArmature, Bender, Target):
+    bl_idname = "mcp.limbs_bend_positive"
+    bl_label = "Bend Limbs Positive"
+    bl_description = "Ensure that limbs' X rotation is positive."
+    bl_options = {'UNDO'}
+
+    def prequel(self, context):
+        rig = context.object
+        return (rig, list(rig.data.layers))
+
+    def run(self, context):
+        from .loop import getActiveFramesBetweenMarkers
+
+        scn = context.scene
+        rig = context.object
+        self.findTarget(context, rig)
+        frames = getActiveFramesBetweenMarkers(rig, scn)
+        self.limbsBendPositive(rig, frames)
+        print("Limbs bent positive")
+
+    def sequel(self, context, data):
+        rig,layers = data
+        rig.data.layers = layers
+
+#-------------------------------------------------------------
+#
+#-------------------------------------------------------------
 
 def getPoseMatrix(gmat, pb):
     restInv = pb.bone.matrix_local.inverted()
     if pb.parent:
         parInv = pb.parent.matrix.inverted()
         parRest = pb.parent.bone.matrix_local
-        return Mult4(restInv, parRest, parInv, gmat)
+        return restInv @ parRest @ parInv @ gmat
     else:
-        return Mult2(restInv, gmat)
+        return restInv @ gmat
 
 
 def getGlobalMatrix(mat, pb):
-    gmat = Mult2(pb.bone.matrix_local, mat)
+    gmat = pb.bone.matrix_local @ mat
     if pb.parent:
         parMat = pb.parent.matrix
         parRest = pb.parent.bone.matrix_local
-        return Mult3(parMat, parRest.inverted(), gmat)
+        return parMat @ parRest.inverted() @ gmat
     else:
         return gmat
 
@@ -244,7 +318,7 @@ def getSnapBones(rig, key, suffix):
     except KeyError:
         names = None
     if not names:
-        raise McpError("Not an mhx armature")
+        raise MocapError("Not an mhx armature")
 
     pbones = []
     constraints = []
@@ -265,34 +339,186 @@ def muteConstraints(constraints, value):
         cns.mute = value
 
 
-def clearAnimation(rig, context, act, type, snapBones):
-    from . import target
+class Transferer(Bender, Target):
+    useArms : BoolProperty(
+        name="Include Arms",
+        description="Include arms in FK/IK snapping",
+        default=False)
 
-    scn = context.scene
-    target.getTargetArmature(rig, context)
+    useLegs : BoolProperty(
+        name="Include Legs",
+        description="Include legs in FK/IK snapping",
+        default=True)
 
-    ikBones = []
-    if scn.McpFkIkArms:
-        for bname in snapBones["Arm" + type]:
-            if bname is not None:
-                ikBones += [bname+".L", bname+".R"]
-    if scn.McpFkIkLegs:
-        for bname in snapBones["Leg" + type]:
-            if bname is not None:
-                ikBones += [bname+".L", bname+".R"]
+    def draw(self, context):
+        self.layout.prop(self, "useArms")
+        self.layout.prop(self, "useLegs")
+        Target.draw(self, context)
 
-    ikFCurves = []
-    for fcu in act.fcurves:
-        words = fcu.data_path.split('"')
-        if (words[0] == "pose.bones[" and
-            words[1] in ikBones):
-            ikFCurves.append(fcu)
 
-    if ikFCurves == []:
-        raise MocapError("%s bones have no animation" % type)
+    def clearAnimation(self, rig, context, act, type, snapBones):
+        scn = context.scene
+        self.findTarget(context, rig)
 
-    for fcu in ikFCurves:
-        act.fcurves.remove(fcu)
+        ikBones = []
+        if self.useArms:
+            for bname in snapBones["Arm" + type]:
+                if bname is not None:
+                    ikBones += [bname+".L", bname+".R"]
+        if self.useLegs:
+            for bname in snapBones["Leg" + type]:
+                if bname is not None:
+                    ikBones += [bname+".L", bname+".R"]
+
+        ikFCurves = []
+        for fcu in act.fcurves:
+            words = fcu.data_path.split('"')
+            if (words[0] == "pose.bones[" and
+                words[1] in ikBones):
+                ikFCurves.append(fcu)
+
+        if ikFCurves == []:
+            raise MocapError("%s bones have no animation" % type)
+
+        for fcu in ikFCurves:
+            act.fcurves.remove(fcu)
+
+
+    def transferMhxToFk(self, rig, context):
+        from .loop import getActiveFramesBetweenMarkers
+
+        scn = context.scene
+        self.findTarget(context, rig)
+
+        lArmSnapIk,lArmCnsIk = getSnapBones(rig, "ArmIK", "_L")
+        lArmSnapFk,lArmCnsFk = getSnapBones(rig, "ArmFK", "_L")
+        rArmSnapIk,rArmCnsIk = getSnapBones(rig, "ArmIK", "_R")
+        rArmSnapFk,rArmCnsFk = getSnapBones(rig, "ArmFK", "_R")
+        lLegSnapIk,lLegCnsIk = getSnapBones(rig, "LegIK", "_L")
+        lLegSnapFk,lLegCnsFk = getSnapBones(rig, "LegFK", "_L")
+        rLegSnapIk,rLegCnsIk = getSnapBones(rig, "LegIK", "_R")
+        rLegSnapFk,rLegCnsFk = getSnapBones(rig, "LegFK", "_R")
+
+        #muteAllConstraints(rig, True)
+
+        oldLayers = list(rig.data.layers)
+        setMhxIk(rig, self.useArms, self.useLegs, 1.0)
+        rig.data.layers = MhxLayers
+
+        lLegIkToAnkle = rig["MhaLegIkToAnkle_L"]
+        rLegIkToAnkle = rig["MhaLegIkToAnkle_R"]
+
+        frames = getActiveFramesBetweenMarkers(rig, scn)
+        nFrames = len(frames)
+        self.useKnees = self.useElbows = True
+        self.limbsBendPositive(rig, frames)
+
+        for n,frame in enumerate(frames):
+            showProgress(n, frame, nFrames)
+            scn.frame_set(frame)
+            updateScene()
+            if self.useArms:
+                snapFkArm(rig, lArmSnapIk, lArmSnapFk, frame)
+                snapFkArm(rig, rArmSnapIk, rArmSnapFk, frame)
+            if self.useLegs:
+                snapFkLeg(rig, lLegSnapIk, lLegSnapFk, frame, lLegIkToAnkle)
+                snapFkLeg(rig, rLegSnapIk, rLegSnapFk, frame, rLegIkToAnkle)
+
+        rig.data.layers = oldLayers
+        setMhxIk(rig, self.useArms, self.useLegs, 0.0)
+        setInterpolation(rig)
+        #muteAllConstraints(rig, False)
+
+
+    def transferMhxToIk(self, rig, context):
+        from .loop import getActiveFramesBetweenMarkers
+
+        scn = context.scene
+        self.findTarget(context, rig)
+
+        lArmSnapIk,lArmCnsIk = getSnapBones(rig, "ArmIK", "_L")
+        lArmSnapFk,lArmCnsFk = getSnapBones(rig, "ArmFK", "_L")
+        rArmSnapIk,rArmCnsIk = getSnapBones(rig, "ArmIK", "_R")
+        rArmSnapFk,rArmCnsFk = getSnapBones(rig, "ArmFK", "_R")
+        lLegSnapIk,lLegCnsIk = getSnapBones(rig, "LegIK", "_L")
+        lLegSnapFk,lLegCnsFk = getSnapBones(rig, "LegFK", "_L")
+        rLegSnapIk,rLegCnsIk = getSnapBones(rig, "LegIK", "_R")
+        rLegSnapFk,rLegCnsFk = getSnapBones(rig, "LegFK", "_R")
+
+        #muteAllConstraints(rig, True)
+
+        oldLayers = list(rig.data.layers)
+        setMhxIk(rig, self.useArms, self.useLegs, 0.0)
+        rig.data.layers = MhxLayers
+
+        lLegIkToAnkle = rig["MhaLegIkToAnkle_L"]
+        rLegIkToAnkle = rig["MhaLegIkToAnkle_R"]
+
+        frames = getActiveFramesBetweenMarkers(rig, scn)
+        #frames = range(scn.frame_start, scn.frame_end+1)
+        nFrames = len(frames)
+        for n,frame in enumerate(frames):
+            showProgress(n, frame, nFrames)
+            scn.frame_set(frame)
+            updateScene()
+            if self.useArms:
+                snapIkArm(rig, lArmSnapIk, lArmSnapFk, frame)
+                snapIkArm(rig, rArmSnapIk, rArmSnapFk, frame)
+            if self.useLegs:
+                snapIkLeg(rig, lLegSnapIk, lLegSnapFk, frame, lLegIkToAnkle)
+                snapIkLeg(rig, rLegSnapIk, rLegSnapFk, frame, rLegIkToAnkle)
+
+        rig.data.layers = oldLayers
+        setMhxIk(rig, self.useArms, self.useLegs, 1.0)
+        setInterpolation(rig)
+        #muteAllConstraints(rig, False)
+
+
+
+def muteAllConstraints(rig, value):
+    lArmSnapIk,lArmCnsIk = getSnapBones(rig, "ArmIK", "_L")
+    lArmSnapFk,lArmCnsFk = getSnapBones(rig, "ArmFK", "_L")
+    rArmSnapIk,rArmCnsIk = getSnapBones(rig, "ArmIK", "_R")
+    rArmSnapFk,rArmCnsFk = getSnapBones(rig, "ArmFK", "_R")
+    lLegSnapIk,lLegCnsIk = getSnapBones(rig, "LegIK", "_L")
+    lLegSnapFk,lLegCnsFk = getSnapBones(rig, "LegFK", "_L")
+    rLegSnapIk,rLegCnsIk = getSnapBones(rig, "LegIK", "_R")
+    rLegSnapFk,rLegCnsFk = getSnapBones(rig, "LegFK", "_R")
+
+    muteConstraints(lArmCnsIk, value)
+    muteConstraints(lArmCnsFk, value)
+    muteConstraints(rArmCnsIk, value)
+    muteConstraints(rArmCnsFk, value)
+    muteConstraints(lLegCnsIk, value)
+    muteConstraints(lLegCnsFk, value)
+    muteConstraints(rLegCnsIk, value)
+    muteConstraints(rLegCnsFk, value)
+
+#------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------
+
+def setLocation(bname, rig):
+    pb = rig.pose.bones[bname]
+    pb.keyframe_insert("location", group=pb.name)
+
+
+def setRotation(bname, rig):
+    pb = rig.pose.bones[bname]
+    if pb.rotation_mode == 'QUATERNION':
+        pb.keyframe_insert("rotation_quaternion", group=pb.name)
+    else:
+        pb.keyframe_insert("rotation_euler", group=pb.name)
+
+
+def setLocRot(bname, rig):
+    pb = rig.pose.bones[bname]
+    pb.keyframe_insert("location", group=pb.name)
+    pb = rig.pose.bones[bname]
+    if pb.rotation_mode == 'QUATERNION':
+        pb.keyframe_insert("rotation_quaternion", group=pb.name)
+    else:
+        pb.keyframe_insert("rotation_euler", group=pb.name)
 
 
 def setMhxIk(rig, useArms, useLegs, value):
@@ -322,151 +548,6 @@ def setMhxIk(rig, useArms, useLegs, value):
             rig.data.layers[n] = False
 
 
-def transferMhxToFk(rig, context):
-    from . import target
-
-    scn = context.scene
-    target.getTargetArmature(rig, context)
-
-    lArmSnapIk,lArmCnsIk = getSnapBones(rig, "ArmIK", "_L")
-    lArmSnapFk,lArmCnsFk = getSnapBones(rig, "ArmFK", "_L")
-    rArmSnapIk,rArmCnsIk = getSnapBones(rig, "ArmIK", "_R")
-    rArmSnapFk,rArmCnsFk = getSnapBones(rig, "ArmFK", "_R")
-    lLegSnapIk,lLegCnsIk = getSnapBones(rig, "LegIK", "_L")
-    lLegSnapFk,lLegCnsFk = getSnapBones(rig, "LegFK", "_L")
-    rLegSnapIk,rLegCnsIk = getSnapBones(rig, "LegIK", "_R")
-    rLegSnapFk,rLegCnsFk = getSnapBones(rig, "LegFK", "_R")
-
-    #muteAllConstraints(rig, True)
-
-    oldLayers = list(rig.data.layers)
-    setMhxIk(rig, scn.McpFkIkArms, scn.McpFkIkLegs, 1.0)
-    rig.data.layers = MhxLayers
-
-    lLegIkToAnkle = rig["MhaLegIkToAnkle_L"]
-    rLegIkToAnkle = rig["MhaLegIkToAnkle_R"]
-
-    frames = getActiveFramesBetweenMarkers(rig, scn)
-    nFrames = len(frames)
-    limbsBendPositive(rig, scn.McpFkIkArms, scn.McpFkIkLegs, frames)
-
-    for n,frame in enumerate(frames):
-        showProgress(n, frame, nFrames)
-        scn.frame_set(frame)
-        updateScene()
-        if scn.McpFkIkArms:
-            snapFkArm(rig, lArmSnapIk, lArmSnapFk, frame)
-            snapFkArm(rig, rArmSnapIk, rArmSnapFk, frame)
-        if scn.McpFkIkLegs:
-            snapFkLeg(rig, lLegSnapIk, lLegSnapFk, frame, lLegIkToAnkle)
-            snapFkLeg(rig, rLegSnapIk, rLegSnapFk, frame, rLegIkToAnkle)
-
-    rig.data.layers = oldLayers
-    setMhxIk(rig, scn.McpFkIkArms, scn.McpFkIkLegs, 0.0)
-    setInterpolation(rig)
-    #muteAllConstraints(rig, False)
-
-
-def transferMhxToIk(rig, context):
-    from . import target
-
-    scn = context.scene
-    target.getTargetArmature(rig, context)
-
-    lArmSnapIk,lArmCnsIk = getSnapBones(rig, "ArmIK", "_L")
-    lArmSnapFk,lArmCnsFk = getSnapBones(rig, "ArmFK", "_L")
-    rArmSnapIk,rArmCnsIk = getSnapBones(rig, "ArmIK", "_R")
-    rArmSnapFk,rArmCnsFk = getSnapBones(rig, "ArmFK", "_R")
-    lLegSnapIk,lLegCnsIk = getSnapBones(rig, "LegIK", "_L")
-    lLegSnapFk,lLegCnsFk = getSnapBones(rig, "LegFK", "_L")
-    rLegSnapIk,rLegCnsIk = getSnapBones(rig, "LegIK", "_R")
-    rLegSnapFk,rLegCnsFk = getSnapBones(rig, "LegFK", "_R")
-
-    #muteAllConstraints(rig, True)
-
-    oldLayers = list(rig.data.layers)
-    setMhxIk(rig, scn.McpFkIkArms, scn.McpFkIkLegs, 0.0)
-    rig.data.layers = MhxLayers
-
-    lLegIkToAnkle = rig["MhaLegIkToAnkle_L"]
-    rLegIkToAnkle = rig["MhaLegIkToAnkle_R"]
-
-    frames = getActiveFramesBetweenMarkers(rig, scn)
-    #frames = range(scn.frame_start, scn.frame_end+1)
-    nFrames = len(frames)
-    for n,frame in enumerate(frames):
-        showProgress(n, frame, nFrames)
-        scn.frame_set(frame)
-        updateScene()
-        if scn.McpFkIkArms:
-            snapIkArm(rig, lArmSnapIk, lArmSnapFk, frame)
-            snapIkArm(rig, rArmSnapIk, rArmSnapFk, frame)
-        if scn.McpFkIkLegs:
-            snapIkLeg(rig, lLegSnapIk, lLegSnapFk, frame, lLegIkToAnkle)
-            snapIkLeg(rig, rLegSnapIk, rLegSnapFk, frame, rLegIkToAnkle)
-
-    rig.data.layers = oldLayers
-    setMhxIk(rig, scn.McpFkIkArms, scn.McpFkIkLegs, 1.0)
-    setInterpolation(rig)
-    #muteAllConstraints(rig, False)
-
-
-def muteAllConstraints(rig, value):
-    lArmSnapIk,lArmCnsIk = getSnapBones(rig, "ArmIK", "_L")
-    lArmSnapFk,lArmCnsFk = getSnapBones(rig, "ArmFK", "_L")
-    rArmSnapIk,rArmCnsIk = getSnapBones(rig, "ArmIK", "_R")
-    rArmSnapFk,rArmCnsFk = getSnapBones(rig, "ArmFK", "_R")
-    lLegSnapIk,lLegCnsIk = getSnapBones(rig, "LegIK", "_L")
-    lLegSnapFk,lLegCnsFk = getSnapBones(rig, "LegFK", "_L")
-    rLegSnapIk,rLegCnsIk = getSnapBones(rig, "LegIK", "_R")
-    rLegSnapFk,rLegCnsFk = getSnapBones(rig, "LegFK", "_R")
-
-    muteConstraints(lArmCnsIk, value)
-    muteConstraints(lArmCnsFk, value)
-    muteConstraints(rArmCnsIk, value)
-    muteConstraints(rArmCnsFk, value)
-    muteConstraints(lLegCnsIk, value)
-    muteConstraints(lLegCnsFk, value)
-    muteConstraints(rLegCnsIk, value)
-    muteConstraints(rLegCnsFk, value)
-
-
-#------------------------------------------------------------------------
-#   Rigify
-#------------------------------------------------------------------------
-
-SnapBonesRigify = {
-    "Arm"   : ["upper_arm", "forearm", "hand"],
-    "ArmFK" : ["upper_arm.fk", "forearm.fk", "hand.fk"],
-    "ArmIK" : ["hand_ik", "elbow_target.ik"],
-    "Leg"   : ["thigh", "shin", "foot"],
-    "LegFK" : ["thigh.fk", "shin.fk", "foot.fk"],
-    "LegIK" : ["foot.ik", "foot_roll.ik", "knee_target.ik"],
-}
-
-def setLocation(bname, rig):
-    pb = rig.pose.bones[bname]
-    pb.keyframe_insert("location", group=pb.name)
-
-
-def setRotation(bname, rig):
-    pb = rig.pose.bones[bname]
-    if pb.rotation_mode == 'QUATERNION':
-        pb.keyframe_insert("rotation_quaternion", group=pb.name)
-    else:
-        pb.keyframe_insert("rotation_euler", group=pb.name)
-
-
-def setLocRot(bname, rig):
-    pb = rig.pose.bones[bname]
-    pb.keyframe_insert("location", group=pb.name)
-    pb = rig.pose.bones[bname]
-    if pb.rotation_mode == 'QUATERNION':
-        pb.keyframe_insert("rotation_quaternion", group=pb.name)
-    else:
-        pb.keyframe_insert("rotation_euler", group=pb.name)
-
-
 def setRigifyFKIK(rig, value):
     rig.pose.bones["hand.ik.L"]["ikfk_switch"] = value
     rig.pose.bones["hand.ik.R"]["ikfk_switch"] = value
@@ -494,271 +575,116 @@ def setRigify2FKIK(rig, value):
     torso["neck_follow"] = 1.0
 
 
-def transferRigifyToFk(rig, context, delim):
-    from rig_ui import fk2ik_arm, fk2ik_leg
-
-    scn = context.scene
-    frames = getActiveFramesBetweenMarkers(rig, scn)
-    nFrames = len(frames)
-    for n,frame in enumerate(frames):
-        showProgress(n, frame, nFrames)
-        scn.frame_set(frame)
-        updateScene()
-
-        if scn.McpFkIkArms:
-            for suffix in [".L", ".R"]:
-                uarm  = "upper_arm"+delim+"fk"+suffix
-                farm  = "forearm"+delim+"fk"+suffix
-                hand  = "hand"+delim+"fk"+suffix
-                uarmi = "MCH-upper_arm"+delim+"ik"+suffix
-                farmi = "MCH-forearm"+delim+"ik"+suffix
-                handi = "hand"+delim+"ik"+suffix
-
-                fk = [uarm,farm,hand]
-                ik = [uarmi,farmi,handi]
-                fk2ik_arm(rig, fk, ik)
-
-                setRotation(uarm, rig)
-                setRotation(farm, rig)
-                setRotation(hand, rig)
-
-        if scn.McpFkIkLegs:
-            for suffix in [".L", ".R"]:
-                thigh  = "thigh"+delim+"fk"+suffix
-                shin   = "shin"+delim+"fk"+suffix
-                foot   = "foot"+delim+"fk"+suffix
-                mfoot  = "MCH-foot"+suffix
-                thighi = "MCH-thigh"+delim+"ik"+suffix
-                shini  = "MCH-shin"+delim+"ik"+suffix
-                footi  = "foot"+delim+"ik"+suffix
-                mfooti = "MCH-foot"+suffix+".001"
-
-                fk = [thigh,shin,foot,mfoot]
-                ik = [thighi,shini,footi,mfooti]
-                fk2ik_leg(rig, fk, ik)
-
-                setRotation(thigh, rig)
-                setRotation(shin, rig)
-                setRotation(foot, rig)
-
-    setInterpolation(rig)
-    for suffix in [".L", ".R"]:
-        if scn.McpFkIkArms:
-            rig.pose.bones["hand.ik"+suffix]["ikfk_switch"] = 0.0
-        if scn.McpFkIkLegs:
-            rig.pose.bones["foot.ik"+suffix]["ikfk_switch"] = 0.0
-
-
-def transferRigifyToIk(rig, context, delim):
-    from rig_ui import ik2fk_arm, ik2fk_leg
-
-    scn = context.scene
-    frames = getActiveFramesBetweenMarkers(rig, scn)
-    nFrames = len(frames)
-    for n,frame in enumerate(frames):
-        showProgress(n, frame, nFrames)
-        scn.frame_set(frame)
-        updateScene()
-
-        if scn.McpFkIkArms:
-            for suffix in [".L", ".R"]:
-                uarm  = "upper_arm"+delim+"fk"+suffix
-                farm  = "forearm"+delim+"fk"+suffix
-                hand  = "hand"+delim+"fk"+suffix
-                uarmi = "MCH-upper_arm"+delim+"ik"+suffix
-                farmi = "MCH-forearm"+delim+"ik"+suffix
-                handi = "hand"+delim+"ik"+suffix
-                pole  = "elbow_target"+delim+"ik"+suffix
-
-                fk = [uarm,farm,hand]
-                ik = [uarmi,farmi,handi,pole]
-                ik2fk_arm(rig, fk, ik)
-
-                setLocation(pole, rig)
-                setLocRot(handi, rig)
-
-        if scn.McpFkIkLegs:
-            for suffix in [".L", ".R"]:
-                thigh  = "thigh"+delim+"fk"+suffix
-                shin   = "shin"+delim+"fk"+suffix
-                foot   = "foot"+delim+"fk"+suffix
-                mfoot  = "MCH-foot"+suffix
-                thighi = "MCH-thigh"+delim+"ik"+suffix
-                shini  = "MCH-shin"+delim+"ik"+suffix
-                footi  = "foot"+delim+"ik"+suffix
-                footroll = "foot_roll"+delim+"ik"+suffix
-                pole   = "knee_target"+delim+"ik"+suffix
-                mfooti = "MCH-foot"+suffix+".001"
-
-                fk = [thigh,shin,foot,mfoot]
-                ik = [thighi,shini,footi,footroll,pole,mfooti]
-                ik2fk_leg(rig, fk, ik)
-
-                setLocation(pole, rig)
-                setLocRot(footi, rig)
-                setRotation(footroll, rig)
-
-    setInterpolation(rig)
-    for suffix in [".L", ".R"]:
-        if scn.McpFkIkArms:
-            rig.pose.bones["hand.ik"+suffix]["ikfk_switch"] = 1.0
-        if scn.McpFkIkLegs:
-            rig.pose.bones["foot.ik"+suffix]["ikfk_switch"] = 1.0
-
-#-------------------------------------------------------------
-#   Limbs bend positive
-#-------------------------------------------------------------
-
-def limbsBendPositive(rig, doElbows, doKnees, frames):
-    limbs = {}
-    if doElbows:
-        pb = getTrgBone("forearm.L", rig)
-        minimizeFCurve(pb, rig, 0, frames)
-        pb = getTrgBone("forearm.R", rig)
-        minimizeFCurve(pb, rig, 0, frames)
-    if doKnees:
-        pb = getTrgBone("shin.L", rig)
-        minimizeFCurve(pb, rig, 0, frames)
-        pb = getTrgBone("shin.R", rig)
-        minimizeFCurve(pb, rig, 0, frames)
-
-
-def minimizeFCurve(pb, rig, index, frames):
-    if pb is None:
-        return
-    fcu = findBoneFCurve(pb, rig, index)
-    if fcu is None:
-        return
-    y0 = fcu.evaluate(0)
-    t0 = frames[0]
-    t1 = frames[-1]
-    for kp in fcu.keyframe_points:
-        t = kp.co[0]
-        if t >= t0 and t <= t1:
-            y = kp.co[1]
-            if y < y0:
-                kp.co[1] = y0
-
-
-class MCP_OT_LimbsBendPositive(bpy.types.Operator):
-    bl_idname = "mcp.limbs_bend_positive"
-    bl_label = "Bend Limbs Positive"
-    bl_description = "Ensure that limbs' X rotation is positive."
-    bl_options = {'UNDO'}
-
-    def execute(self, context):
-        from .target import getTargetArmature
-        scn = context.scene
-        rig = context.object
-        try:
-            layers = list(rig.data.layers)
-            getTargetArmature(rig, context)
-            frames = getActiveFramesBetweenMarkers(rig, scn)
-            limbsBendPositive(rig, scn.McpBendElbows, scn.McpBendKnees, frames)
-            rig.data.layers = layers
-            print("Limbs bent positive")
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        return{'FINISHED'}
+def setRigToFK(rig):
+    setMhxIk(rig, True, True, 0.0)
+    if isRigify(rig):
+        setRigifyFKIK(rig, 0.0)
+    elif isRigify2(rig):
+        setRigify2FKIK(rig, 1.0)
 
 #------------------------------------------------------------------------
 #   Buttons
 #------------------------------------------------------------------------
 
-class MCP_OT_TransferToFk(bpy.types.Operator):
+def disableGlobalUndo(context):
+    return None
+    undo = context.user_preferences.edit.use_global_undo
+    context.user_preferences.edit.use_global_undo = False
+    return undo
+
+
+def restoreGlobalUndo(context, undo):
+    return
+    context.user_preferences.edit.use_global_undo = undo
+
+
+class MCP_OT_TransferToFk(BvhPropsOperator, IsMhx, Transferer):
     bl_idname = "mcp.transfer_to_fk"
     bl_label = "Transfer IK => FK"
     bl_description = "Transfer IK animation to FK bones"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        use_global_undo = context.user_preferences.edit.use_global_undo
-        context.user_preferences.edit.use_global_undo = False
-        try:
-            startProgress("Transfer to FK")
-            rig = context.object
-            scn = context.scene
-            if isMhxRig(rig):
-                transferMhxToFk(rig, context)
-            elif isRigify(rig):
-                transferRigifyToFk(rig, context, ".")
-            elif isRigify2(rig):
-                transferRigifyToFk(rig, context, "_")
-            else:
-                raise MocapError("Can not transfer to FK with this rig")
-            endProgress("Transfer to FK completed")
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        finally:
-            context.user_preferences.edit.use_global_undo = use_global_undo
-        return{'FINISHED'}
+    def prequel(self, context):
+        return disableGlobalUndo(context)
+
+    def run(self, context):
+        startProgress("Transfer to FK")
+        rig = context.object
+        scn = context.scene
+        if isMhxRig(rig):
+            self.transferMhxToFk(rig, context)
+        else:
+            raise MocapError("Can not transfer to FK with this rig")
+        raise MocapMessage("Transfer to FK completed")
+
+    def sequel(self, context, undo):
+        return restoreGlobalUndo(context, undo)
 
 
-class MCP_OT_TransferToIk(bpy.types.Operator):
+
+class MCP_OT_TransferToIk(BvhPropsOperator, IsMhx, Transferer):
     bl_idname = "mcp.transfer_to_ik"
     bl_label = "Transfer FK => IK"
     bl_description = "Transfer FK animation to IK bones"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        use_global_undo = context.user_preferences.edit.use_global_undo
-        context.user_preferences.edit.use_global_undo = False
-        try:
-            startProgress("Transfer to IK")
-            rig = context.object
-            scn = context.scene
-            if isMhxRig(rig):
-                transferMhxToIk(rig, context)
-            elif isRigify(rig):
-                transferRigifyToIk(rig, context, ".")
-            elif isRigify2(rig):
-                transferRigifyToIk(rig, context, "_")
-            else:
-                raise MocapError("Can not transfer to IK with this rig")
-            endProgress("Transfer to IK completed")
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        finally:
-            context.user_preferences.edit.use_global_undo = use_global_undo
-        return{'FINISHED'}
+    def prequel(self, context):
+        return disableGlobalUndo(context)
+
+    def run(self, context):
+        startProgress("Transfer to IK")
+        rig = context.object
+        scn = context.scene
+        if isMhxRig(rig):
+            self.transferMhxToIk(rig, context)
+        elif isRigify(rig):
+            self.transferRigifyToIk(rig, context, ".")
+        elif isRigify2(rig):
+            self.transferRigifyToIk(rig, context, "_")
+        else:
+            raise MocapError("Can not transfer to IK with this rig")
+        raise MocapMessage("Transfer to IK completed")
+
+    def sequel(self, context, undo):
+        return restoreGlobalUndo(context, undo)
 
 
-class MCP_OT_ClearAnimation(bpy.types.Operator, TypeString):
+class MCP_OT_ClearAnimation(HideOperator, IsMhx, Transferer):
     bl_idname = "mcp.clear_animation"
     bl_label = "Clear Animation"
     bl_description = "Clear Animation For FK or IK Bones"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        use_global_undo = context.user_preferences.edit.use_global_undo
-        context.user_preferences.edit.use_global_undo = False
-        try:
-            startProgress("Clear animation")
-            rig = context.object
-            scn = context.scene
-            if not rig.animation_data:
-                raise MocapError("Rig has no animation data")
-            act = rig.animation_data.action
-            if not act:
-                raise MocapError("Rig has no action")
+    type : StringProperty()
 
-            if isMhxRig(rig):
-                clearAnimation(rig, context, act, self.type, SnapBonesAlpha8)
-                if self.type == "FK":
-                    value = 1.0
-                else:
-                    value = 0.0
-                setMhxIk(rig, scn.McpFkIkArms, scn.McpFkIkLegs, value)
-            elif isRigify(rig):
-                clearAnimation(rig, context, act, self.type, SnapBonesRigify)
+    def prequel(self, context):
+        return disableGlobalUndo(context)
+
+    def run(self, context):
+        startProgress("Clear animation")
+        rig = context.object
+        scn = context.scene
+        if not rig.animation_data:
+            raise MocapError("Rig has no animation data")
+        act = rig.animation_data.action
+        if not act:
+            raise MocapError("Rig has no action")
+
+        if isMhxRig(rig):
+            self.clearAnimation(rig, context, act, self.type, SnapBonesAlpha8)
+            if self.type == "FK":
+                value = 1.0
             else:
-                raise MocapError("Can not clear %s animation with this rig" % self.type)
-            endProgress("Animation cleared")
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        finally:
-            context.user_preferences.edit.use_global_undo = use_global_undo
-        return{'FINISHED'}
+                value = 0.0
+            setMhxIk(rig, self.useArms, self.useLegs, value)
+        elif isRigify(rig):
+            self.clearAnimation(rig, context, act, self.type, SnapBonesRigify)
+        else:
+            raise MocapError("Can not clear %s animation with this rig" % self.type)
+        raise MocapMessage("Animation cleared")
+
+    def sequel(self, context, undo):
+        return restoreGlobalUndo(context, undo)
 
 #------------------------------------------------------------------------
 #   Debug
@@ -779,14 +705,24 @@ def printHand(context):
         print(footIk.matrix)
 
 
-class MCP_OT_PrintHands(bpy.types.Operator):
+class MCP_OT_PrintHands(BvhOperator, IsArmature):
     bl_idname = "mcp.print_hands"
     bl_label = "Print Hands"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
+    def run(self, context):
         printHand(context)
-        return{'FINISHED'}
+
+
+class MCP_OT_Test(BvhOperator, IsArmature):
+    bl_idname = "mcp.test"
+    bl_label = "Test"
+    bl_options = {'UNDO'}
+
+    def run(self, context):
+        rig = context.object
+        print("TRIK", rig)
+        print(rig.data.rigify_rig_ui)
 
 #----------------------------------------------------------
 #   Initialize
@@ -798,6 +734,7 @@ classes = [
     MCP_OT_TransferToIk,
     MCP_OT_ClearAnimation,
     MCP_OT_PrintHands,
+    MCP_OT_Test,
 ]
 
 def initialize():

@@ -1,0 +1,44 @@
+{
+    "name"  : "Eyes Japan",
+    "url"   : "",
+    
+    "bones" : {
+        "Hips" : "hips",
+        "Chest" : "spine-1",
+        "CS_BVH" : "chest",
+        "Neck" : "neck",
+        "Head" : "head",
+        
+        "LeftHip" : "thigh.L",
+        "LeftKnee" : "shin.L",
+        "LeftAnkle" : "foot.L",
+
+        "RightHip" : "thigh.R",
+        "RightKnee" : "shin.R",
+        "RightAnkle" : "foot.R",
+
+        "LeftCollar" : "shoulder.L",
+        "LeftShoulder" : "upper_arm.L",
+        "LeftElbow" : "forearm.L",
+        "LeftWrist" : "hand.L",
+
+        "RightCollar" : "shoulder.R",
+        "RightShoulder" : "upper_arm.R",
+        "RightElbow" : "forearm.R",
+        "RightWrist" : "hand.R"
+    },
+    
+    "t-pose" : [
+       [
+           "LeftShoulder",
+           [0.70711, 0, 0, -0.70711]
+       ],
+       [
+           "RightShoulder",
+           [0.70711, 0, 0, 0.70711]
+       ]    
+    ]
+}
+
+
+

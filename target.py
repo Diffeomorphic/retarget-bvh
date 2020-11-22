@@ -1,19 +1,19 @@
 # ------------------------------------------------------------------------------
 #   BSD 2-Clause License
-#   
-#   Copyright (c) 2019, Thomas Larsson
+#
+#   Copyright (c) 2019-2020, Thomas Larsson
 #   All rights reserved.
-#   
+#
 #   Redistribution and use in source and binary forms, with or without
 #   modification, are permitted provided that the following conditions are met:
-#   
+#
 #   1. Redistributions of source code must retain the above copyright notice, this
 #      list of conditions and the following disclaimer.
-#   
+#
 #   2. Redistributions in binary form must reproduce the above copyright notice,
 #      this list of conditions and the following disclaimer in the documentation
 #      and/or other materials provided with the distribution.
-#   
+#
 #   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 #   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 #   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -26,206 +26,130 @@
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # ------------------------------------------------------------------------------
 
-
-
 import bpy
 from bpy.props import *
+from bpy_extras.io_utils import ExportHelper
 import math
 import os
 
-from . import utils
-from . import t_pose
 from .utils import *
 from .armature import CArmature
-if bpy.app.version < (2,80,0):
-    from .buttons27 import SaveTargetExport
-else:
-    from .buttons28 import SaveTargetExport
+from .source import CRigInfo
+
+#----------------------------------------------------------
+#   Target classes
+#----------------------------------------------------------
+
+class CTargetInfo(CArmature, CRigInfo):
+    verboseString = "Read target file"
+
+    def __init__(self, scn, name="Automatic"):
+        CArmature.__init__(self, scn)
+        CRigInfo.__init__(self, scn, name)
+
+
+class Target:
+    useAutoTarget : BoolProperty(
+        name = "Auto Target",
+        description = "Find target rig automatically",
+        default = True)
+
+    def draw(self, context):
+        self.layout.prop(self, "useAutoTarget")
+        if not self.useAutoTarget:
+            scn = context.scene
+            self.layout.prop(scn, "McpTargetRig")
+            self.layout.prop(scn, "McpTargetTPose")
+        self.layout.separator()
+
+    def findTarget(self, context, rig):
+        return findTargetArmature(context, rig, self.useAutoTarget)
 
 #
 #   Global variables
 #
 
-_target = None
-_targetInfo = {}
-#_targetArmatures = { "Automatic" : ([],[],[]) }
-_targetArmatures = {}
-_trgArmature = None
-_trgArmatureEnums =[("Automatic", "Automatic", "Automatic")]
-_ikBones = []
-_bendTwist = {}
+_targetInfos = {}
 
 def getTargetInfo(rigname):
-    global _targetInfo
-    return _targetInfo[rigname]
+    global _targetInfos
+    return _targetInfos[rigname]
 
 def loadTargets():
-    global _targetInfo
-    _targetInfo = {}
+    global _targetInfos
+    _targetInfos = {}
 
 def isTargetInited(scn):
-    return ( _targetArmatures != {} )
+    return ( _targetInfos != {} )
 
 def ensureTargetInited(scn):
     if not isTargetInited(scn):
         initTargets(scn)
 
 #
-#   getTargetArmature(rig, context):
+#   findTargetArmature(context, rig, auto):
 #
 
-def getTargetArmature(rig, context):
-    global _target, _targetArmatures, _targetInfo, _trgArmature, _ikBones, _bendTwist
+def findTargetArmature(context, rig, auto):
+    from .t_pose import autoTPose, putInRestPose, getTPoseInfo, putInRightPose
+    global _targetInfos
 
     scn = context.scene
-    setCategory("Identify Target Rig")
     ensureTargetInited(scn)
-    putInRestPose(rig, True)
-    bones = rig.data.bones.keys()
 
-    if scn.McpAutoTargetRig:
-        name = guessTargetArmatureFromList(rig, bones, scn)
+    if auto:
+        scn.McpTargetRig, scn.McpTargetTPose = guessArmatureFromList(rig, scn, _targetInfos)
+
+    if scn.McpTargetRig == "Automatic":
+        info = CTargetInfo(scn)
+        tposed = info.identifyRig(rig, context, scn.McpTargetTPose)
+        if not tposed:
+            autoTPose(rig, context)
+        _targetInfos["Automatic"] = info
+        info.display("Target")
     else:
-        try:
-            name = scn.McpTargetRig
-        except:
-            raise MocapError("Initialize Target Panel first")
+        info = _targetInfos[scn.McpTargetRig]
+        info.addManualBones(rig)
+        tinfo = getTPoseInfo(scn.McpTargetTPose)
+        if tinfo:
+            tinfo.addTPose(rig)
+        else:
+            scn.McpTargetTPose = "Default"
 
-    if name == "Automatic":
-        setCategory("Automatic Target Rig")
-        amt = _trgArmature = CArmature()
-        amt.findArmature(rig, ignoreHiddenLayers=scn.McpIgnoreHiddenLayers)
-        _targetArmatures["Automatic"] = amt
-        scn.McpTargetRig = "Automatic"
-        amt.display("Target")
+    rig.McpArmature = info.name
+    print("Using target armature %s." % rig.McpArmature)
+    return info
 
-        boneAssoc = []
-        for pb in rig.pose.bones:
-            if pb.McpBone:
-                boneAssoc.append( (pb.name, pb.McpBone) )
 
-        _ikBones = []
-        rig.McpTPoseFile = ""
-        _targetInfo[name] = (boneAssoc, _ikBones, rig.McpTPoseFile, _bendTwist)
-        clearCategory()
-        return boneAssoc
-
+def guessArmatureFromList(rig, scn, infos):
+    print("Identifying rig")
+    for name,info in infos.items():
+        if name == "Automatic":
+            continue
+        elif matchAllBones(rig, info, scn):
+            if info.t_pose_file:
+                return name, info.t_pose_file
+            else:
+                return name, "Default"
     else:
-        setCategory("Manual Target Rig")
-        scn.McpTargetRig = name
-        _target = name
-        (boneAssoc, _ikBones, rig.McpTPoseFile, _bendTwist) = _targetInfo[name]
-        if not testTargetRig(name, rig, boneAssoc):
-            print("WARNING:\nTarget armature %s does not match armature %s.\nBones:" % (rig.name, name))
-            for pair in boneAssoc:
-                print("  %s : %s" % pair)
-        print("Target armature %s" % name)
-
-        for pb in rig.pose.bones:
-            pb.McpBone = pb.McpParent = ""
-        for bname,mhx in boneAssoc:
-            try:
-                rig.pose.bones[bname].McpBone = mhx
-            except KeyError:
-                print("  ", bname)
-                pass
-
-        clearCategory()
-        return boneAssoc
+        return "Automatic", "Default"
 
 
-
-def guessTargetArmatureFromList(rig, bones, scn):
-    global _target, _targetArmatures, _targetInfo
-    ensureTargetInited(scn)
-    print("Guessing target")
-
-    if isMhxRig(rig):
-        return "MHX"
-    elif isMhOfficialRig(rig):
-        return "MH-Official"
-    elif isRigify(rig):
-        return "Rigify"
-    elif isRigify2(rig):
-        return "Rigify2"
-    elif isMhx7Rig(rig):
-        return "MH-alpha7"
-    elif isGenesis(rig):
-        return "Genesis"
-    elif isGenesis3(rig):
-        return "Genesis3"
-    elif False:
-        for name in _targetInfo.keys():
-            if name not in ["MHX", "MH-Official", "Rigify", "Rigify2", "MH-alpha7", "Genesis", "Genesis3"]:
-                (boneAssoc, _ikBones, _tpose, _bendTwist) = _targetInfo[name]
-                if testTargetRig(name, rig, boneAssoc):
-                    return name
-    else:
-        return "Automatic"
-
-
-def testTargetRig(name, rig, rigBones):
-    from .armature import validBone
-    print("Testing %s" % name)
-    for (bname, mhxname) in rigBones:
-        try:
-            pb = rig.pose.bones[bname]
-        except KeyError:
-            pb = None
-        if pb is None or not validBone(pb):
-            print("  Did not find bone %s (%s)" % (bname, mhxname))
+def matchAllBones(rig, info, scn):
+    if not hasAllBones(info.fingerprint, rig):
+        return False
+    if hasSomeBones(info.illegal, rig):
+        return False
+    for bname,mhx in info.bones:
+        if bname in info.optional:
+            continue
+        if (mhx[0:2] == "f_" and not scn.McpIncludeFingers):
+            continue
+        elif bname not in rig.data.bones.keys():
+            if scn.McpVerbose:
+                print("Missing bone:", bname)
             return False
     return True
-
-#
-#   findTargetKeys(mhx, list):
-#
-
-def findTargetKeys(mhx, list):
-    bones = []
-    for (bone, mhx1) in list:
-        if mhx1 == mhx:
-            bones.append(bone)
-    return bones
-
-###############################################################################
-#
-#    Target armatures
-#
-###############################################################################
-
-#    (mhx bone, text)
-
-TargetBoneNames = [
-    ('hips',         'Root bone'),
-    ('spine',        'Lower spine'),
-    ('spine-1',      'Middle spine'),
-    ('chest',        'Upper spine'),
-    ('neck',         'Neck'),
-    ('head',         'Head'),
-    None,
-    ('shoulder.L',   'L shoulder'),
-    ('upper_arm.L',  'L upper arm'),
-    ('forearm.L',    'L forearm'),
-    ('hand.L',       'L hand'),
-    None,
-    ('shoulder.R',   'R shoulder'),
-    ('upper_arm.R',  'R upper arm'),
-    ('forearm.R',    'R forearm'),
-    ('hand.R',       'R hand'),
-    None,
-    ('hip.L',        'L hip'),
-    ('thigh.L',      'L thigh'),
-    ('shin.L',       'L shin'),
-    ('foot.L',       'L foot'),
-    ('toe.L',        'L toes'),
-    None,
-    ('hip.R',        'R hip'),
-    ('thigh.R',      'R thigh'),
-    ('shin.R',       'R shin'),
-    ('foot.R',       'R foot'),
-    ('toe.R',        'R toes'),
-]
 
 ###############################################################################
 #
@@ -233,139 +157,147 @@ TargetBoneNames = [
 #
 ###############################################################################
 
+def readTargetFiles(scn, subdir):
+    global _targetInfos
+    keys = []
+    path = os.path.join(os.path.dirname(__file__), subdir)
+    for fname in os.listdir(path):
+        filepath = os.path.join(path, fname)
+        (name, ext) = os.path.splitext(fname)
+        if ext == ".json" and os.path.isfile(filepath):
+            info = CTargetInfo(scn, "Manual")
+            info.readFile(filepath)
+            _targetInfos[info.name] = info
+            keys.append(info.name)
+    keys.sort()
+    return keys
+
 
 def initTargets(scn):
-    global _targetArmatures, _targetInfo, _trgArmatureEnums
-    _targetInfo = { "Automatic" : ([], [], "", {}) }
-    _targetArmatures = { "Automatic" : CArmature() }
-    path = os.path.join(os.path.dirname(__file__), "target_rigs")
-    for fname in os.listdir(path):
-        file = os.path.join(path, fname)
-        (name, ext) = os.path.splitext(fname)
-        if ext == ".json" and os.path.isfile(file):
-            (name, stuff) = readTrgArmature(file, name)
-            _targetInfo[name] = stuff
-
-    _trgArmatureEnums =[("Automatic", "Automatic", "Automatic")]
-    keys = list(_targetInfo.keys())
-    keys.sort()
-    for key in keys:
-        _trgArmatureEnums.append((key,key,key))
+    global _targetInfos
+    from .t_pose import initTPoses
+    initTPoses(scn)
+    _targetInfos = { "Automatic" : CTargetInfo(scn, "Automatic") }
+    tkeys = readTargetFiles(scn, "known_rigs")
+    keys = ["Automatic"] + tkeys
+    enums = [(key,key,key) for key in keys]
 
     bpy.types.Scene.McpTargetRig = EnumProperty(
-        items = _trgArmatureEnums,
+        items = enums,
         name = "Target rig",
         default = 'Automatic')
     print("Defined McpTargetRig")
-    return
 
 
-def readTrgArmature(filepath, name):
-    import json
-    print("Read target file", filepath)
-    with open(filepath, "r") as fp:
-        struct = json.load(fp)
-    name = struct["name"]
-    bones = [(key, nameOrNone(value)) for key,value in struct["bones"].items()]
-    ikbones = []    
-    if "ikbones" in struct.keys():
-        ikbones = [(key, nameOrNone(value)) for key,value in struct["ikbones"].items()]
-    if "t-pose" in struct.keys():
-        tpose = filepath
-    else:
-        tpose = ""
-    bendtwist = []    
-    if "bendtwist" in struct.keys():
-        bendtwist = [(key, nameOrNone(value)) for key,value in struct["bendtwist"].items()]
-    return (name, (bones,ikbones,tpose,bendtwist))
-
-
-class MCP_OT_InitTargets(bpy.types.Operator):
-    bl_idname = "mcp.init_targets"
-    bl_label = "Init Target Panel"
-    bl_description = "(Re)load all .trg files in the target_rigs directory."
-    bl_options = {'UNDO'}
-
-    def execute(self, context):
-        try:
-            initTargets(context.scene)
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        return{'FINISHED'}
-
-
-class MCP_OT_GetTargetRig(bpy.types.Operator):
-    bl_idname = "mcp.get_target_rig"
+class MCP_OT_IdentifyTargetRig(BvhOperator, IsArmature):
+    bl_idname = "mcp.identify_target_rig"
     bl_label = "Identify Target Rig"
     bl_description = "Identify the target rig type of the active armature."
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        from .retarget import changeTargetData, restoreTargetData
-        rig = context.object
+    def prequel(self, context):
+        from .retarget import changeTargetData
+        return changeTargetData(context.object, context.scene)
+
+    def run(self, context):
         scn = context.scene
-        data = changeTargetData(rig, scn)
-        try:
-            getTargetArmature(rig, context)
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        finally:
-            restoreTargetData(rig, data)
-        return{'FINISHED'}
+        scn.McpTargetRig = "Automatic"
+        findTargetArmature(context, context.object, True)
+        print("Identified rig %s" % scn.McpTargetRig)
 
+    def sequel(self, context, data):
+        from .retarget import restoreTargetData
+        restoreTargetData(data)
 
-def saveTargetFile(filepath, context):
-    from .t_pose import saveTPose
+#----------------------------------------------------------
+#   List Rig
+#----------------------------------------------------------
 
-    rig = context.object
-    scn = context.scene
-    fname,ext = os.path.splitext(filepath)
-    filepath = fname + ".trg"
-    fp = open(filepath, "w")
-    name = os.path.basename(fname).capitalize().replace(" ","_")
-    fp.write("Name:\t%s\n\nBones:\n" % name)
-    for pb in rig.pose.bones:
-        if pb.McpBone:
-            fp.write("\t%s\t%s\n" % (pb.name, pb.McpBone))
-    fp.write("\nIkBones:\n\n")
-    if scn.McpSaveTargetTPose:
-        fp.write("T-pose:\t%s-tpose.json\n" % name)
-    fp.close()
-    print("Saved %s" % filepath)
+from .source import ListRig
 
-    if scn.McpSaveTargetTPose:
-        tposePath = fname + "-tpose.json"
-        saveTPose(context, tposePath)
-
-
-class MCP_OT_SaveTargetFile(bpy.types.Operator, SaveTargetExport):
-    bl_idname = "mcp.save_target_file"
-    bl_label = "Save Target File"
-    bl_description = "Save a .trg file for this character"
+class MCP_OT_ListTargetRig(BvhOperator, ListRig):
+    bl_idname = "mcp.list_target_rig"
+    bl_label = "List Target Rig"
+    bl_description = "List the bone associations of the active target rig"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        try:
-            saveTargetFile(self.properties.filepath, context)
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        return{'FINISHED'}
+    @classmethod
+    def poll(self, context):
+        return context.scene.McpTargetRig
 
-    def invoke(self, context, event):
-        context.window_manager.fileselect_add(self)
-        return {'RUNNING_MODAL'}
+    def sfindKeys(self, mhx, bones):
+        keys = []
+        for (bone, mhx1) in bones:
+            if mhx1 == mhx:
+                keys.append(bone)
+        return keys
+
+    def getBones(self, context):
+        from .t_pose import getTPoseInfo
+        scn = context.scene
+        info = getTargetInfo(scn.McpTargetRig)
+        tinfo = getTPoseInfo(scn.McpTargetTPose)
+        if info and tinfo:
+            return info.bones, tinfo.t_pose
+        elif info:
+            return info.bones, {}
+        else:
+            return [], {}
+
+class MCP_OT_VerifyTargetRig(BvhOperator):
+    bl_idname = "mcp.verify_target_rig"
+    bl_label = "Verify Target Rig"
+    bl_description = "Verify the target rig type of the active armature"
+    bl_options = {'UNDO'}
+
+    @classmethod
+    def poll(self, context):
+        ob = context.object
+        return (context.scene.McpTargetRig and ob and ob.type == 'ARMATURE')
+
+    def run(self, context):
+        rigtype = context.scene.McpTargetRig
+        info = _targetInfos[rigtype]
+        info.testRig(rigtype, context.object, context.scene)
+        raise MocapMessage("Target armature %s verified" % rigtype)
 
 #----------------------------------------------------------
 #   Initialize
 #----------------------------------------------------------
 
 classes = [
-    MCP_OT_InitTargets,
-    MCP_OT_GetTargetRig,
-    MCP_OT_SaveTargetFile,
+    MCP_OT_IdentifyTargetRig,
+    MCP_OT_ListTargetRig,
+    MCP_OT_VerifyTargetRig,
 ]
 
 def initialize():
+    bpy.types.Scene.McpTargetRig = EnumProperty(
+        items = [("Automatic", "Automatic", "Automatic")],
+        name = "Target Rig",
+        default = "Automatic")
+
+    bpy.types.Scene.McpTargetTPose = EnumProperty(
+        items = [("Default", "Default", "Default")],
+        name = "TPose Target",
+        default = "Default")
+
+    bpy.types.Object.McpReverseHip = BoolProperty(
+        name = "Reverse Hip",
+        description = "The rig has a reverse hip",
+        default = False)
+
+    bpy.types.PoseBone.McpBone = StringProperty(
+        name = "Canonical Bone Name",
+        description = "Canonical bone corresponding to this bone",
+        default = "")
+
+    bpy.types.PoseBone.McpParent = StringProperty(
+        name = "Parent",
+        description = "Parent of this bone for retargeting purposes",
+        default = "")
+
+
     for cls in classes:
         bpy.utils.register_class(cls)
 

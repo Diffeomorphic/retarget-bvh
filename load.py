@@ -1,19 +1,19 @@
-# ------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------
 #   BSD 2-Clause License
-#   
-#   Copyright (c) 2019, Thomas Larsson
+#
+#   Copyright (c) 2019-2020, Thomas Larsson
 #   All rights reserved.
-#   
+#
 #   Redistribution and use in source and binary forms, with or without
 #   modification, are permitted provided that the following conditions are met:
-#   
+#
 #   1. Redistributions of source code must retain the above copyright notice, this
 #      list of conditions and the following disclaimer.
-#   
+#
 #   2. Redistributions in binary form must reproduce the above copyright notice,
 #      this list of conditions and the following disclaimer in the documentation
 #      and/or other materials provided with the distribution.
-#   
+#
 #   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 #   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 #   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -26,21 +26,40 @@
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # ------------------------------------------------------------------------------
 
-
-
 import bpy, os, mathutils, math, time
+from bpy_extras.io_utils import ImportHelper
 from math import sin, cos
 from mathutils import *
 from bpy.props import *
 
-from . import props
-from . import simplify
 from .utils import *
+from .source import Source
+from .target import Target
+from .simplify import TimeScaler
 
-if bpy.app.version < (2,80,0):
-    from .buttons27 import ProblemsString, LoadBVH
-else:
-    from .buttons28 import ProblemsString, LoadBVH
+class BvhFile:
+    filename_ext = ".bvh"
+    filter_glob : StringProperty(default="*.bvh", options={'HIDDEN'})
+    filepath : StringProperty(name="File Path", description="Filepath used for importing the BVH file", maxlen=1024, default="")
+
+
+class MultiFile(ImportHelper):
+    files : CollectionProperty(
+        name = "File Path",
+        type = bpy.types.OperatorFileListElement)
+
+    directory : StringProperty(
+        subtype='DIR_PATH')
+
+    def getFilePaths(self):
+        if self.files:
+            filepaths = []
+            for file_elem in self.files:
+                filepath = os.path.join(self.directory, file_elem.name)
+                filepaths.append(filepath)
+            return filepaths
+        else:
+            return [self.filepath]
 
 ###################################################################################
 #    BVH importer.
@@ -85,6 +104,7 @@ class CNode:
             child.display(pad+"  ")
         return
 
+
     def build(self, amt, orig, parent):
         self.head = orig + self.offset
         if not self.children:
@@ -98,9 +118,12 @@ class CNode:
         tails = Vector((0,0,0))
         for child in self.children:
             tails += child.build(amt, self.head, eb)
-        n = len(self.children)
-        eb.tail = tails/n
-        #self.matrix = eb.matrix.rotation_part()
+        tail = tails/len(self.children)
+        if (tail-self.head).length == 0:
+            print("Zero-length bone: %s" % eb.name)
+            vec = self.head - parent.head
+            tail = self.head + vec*0.1
+        eb.tail = tail
         (loc, rot, scale) = eb.matrix.decompose()
         self.matrix = rot.to_matrix()
         self.inverse = self.matrix.copy()
@@ -123,179 +146,227 @@ Frames = 3
 
 Epsilon = 1e-5
 
-def readBvhFile(context, filepath, scn, scan):
-    props.ensureInited(context)
-    setCategory("Load Bvh File")
-    scale = scn.McpBvhScale
-    startFrame = scn.McpStartFrame
-    endFrame = scn.McpEndFrame
-    frameno = 1
-    if scn.McpFlipYAxis:
-        flipMatrix = Mult2(Matrix.Rotation(math.pi, 3, 'X'), Matrix.Rotation(math.pi, 3, 'Y'))
-    else:
-        flipMatrix = Matrix.Rotation(0, 3, 'X')
-    if True or scn.McpRot90Anim:
-        flipMatrix = Mult2(Matrix.Rotation(math.pi/2, 3, 'X'), flipMatrix)
-    if (scn.McpSubsample):
-        ssFactor = scn.McpSSFactor
-    else:
-        ssFactor = 1
-    defaultSS = scn.McpDefaultSS
+class BvhLoader:
+    startFrame : IntProperty(
+        name = "Start Frame",
+        description = "Starting frame for the animation",
+        default = 1)
 
-    fileName = os.path.realpath(os.path.expanduser(filepath))
-    (shortName, ext) = os.path.splitext(fileName)
-    if ext.lower() != ".bvh":
-        raise MocapError("Not a bvh file: " + fileName)
-    startProgress( "Loading BVH file "+ fileName )
+    endFrame : IntProperty(
+        name = "Last Frame",
+        description = "Last frame for the animation",
+        default = 250)
 
-    time1 = time.clock()
-    level = 0
-    nErrors = 0
-    coll = getCollection(context)
-    rig = None
+    scale : FloatProperty(
+        name="Scale",
+        description="Scale the BVH by this value",
+        min=0.0001, max=1000000.0,
+        soft_min=0.001, soft_max=100.0,
+        precision = 3,
+        default=1.0)
 
-    fp = open(fileName, "rU")
-    print( "Reading skeleton" )
-    lineNo = 0
-    for line in fp:
-        words= line.split()
-        lineNo += 1
-        if len(words) == 0:
-            continue
-        key = words[0].upper()
-        if key == 'HIERARCHY':
-            status = Hierarchy
-            ended = False
-        elif key == 'MOTION':
-            if level != 0:
-                raise MocapError("Tokenizer out of kilter %d" % level)
-            if scan:
-                return root
-            amt = bpy.data.armatures.new("BvhAmt")
-            rig = bpy.data.objects.new("BvhRig", amt)
-            coll.objects.link(rig)
-            setActiveObject(context, rig)
-            updateScene(context)
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.object.mode_set(mode='EDIT')
-            root.build(amt, Vector((0,0,0)), None)
-            #root.display('')
-            bpy.ops.object.mode_set(mode='OBJECT')
-            status = Motion
-            print("Reading motion")
-        elif status == Hierarchy:
-            if key == 'ROOT':
-                node = CNode(words, None)
-                root = node
-                nodes = [root]
-            elif key == 'JOINT':
-                node = CNode(words, node)
-                nodes.append(node)
+    x : EnumProperty(
+        items = [(x,x,x) for x in ["0", "90", "180", "270"]],
+        name = "X",
+        description = "X Euler Angle",
+        default = "90")
+
+    y : EnumProperty(
+        items = [(y,y,y) for y in ["0", "90", "180", "270"]],
+        name = "Y",
+        description = "Y Euler Angle",
+        default = "0")
+
+    z : EnumProperty(
+        items = [(z,z,z) for z in ["0", "90", "180", "270"]],
+        name = "Z",
+        description = "Z Euler Angle",
+        default = "0")
+
+    ssFactor : IntProperty(
+        name="Subsample Factor",
+        description="Sample only every n:th frame",
+        min=1, default=1)
+
+    useDefaultSS : BoolProperty(
+        name="Use default subsample",
+        description = "Subsample based on difference in frame rates between BVH file and Blender",
+        default=True)
+
+    def draw(self, context):
+        self.layout.prop(self, "startFrame")
+        self.layout.prop(self, "endFrame")
+        self.layout.separator()
+        self.layout.label(text="Source Rig Orientation:")
+        row = self.layout.row()
+        row.label(text="X:")
+        row.prop(self, "x", expand=True)
+        row = self.layout.row()
+        row.label(text="Y:")
+        row.prop(self, "y", expand=True)
+        row = self.layout.row()
+        row.label(text="Z:")
+        row.prop(self, "z", expand=True)
+        self.layout.separator()
+        self.layout.prop(self, "useDefaultSS")
+        if not self.useDefaultSS:
+            self.layout.prop(self, "ssFactor")
+        self.layout.separator()
+
+
+    def readBvhFile(self, context, filepath, scn, scan):
+        frameno = 1
+        euler = Euler((int(self.x)*D, int(self.y)*D, int(self.z)*D))
+        flipMatrix = euler.to_matrix()
+        ssFactor = self.ssFactor
+
+        fileName = os.path.realpath(os.path.expanduser(filepath))
+        (shortName, ext) = os.path.splitext(fileName)
+        if ext.lower() != ".bvh":
+            raise MocapError("Not a bvh file: " + fileName)
+        startProgress( "Loading BVH file "+ fileName )
+
+        time1 = time.perf_counter()
+        level = 0
+        nErrors = 0
+        coll = context.scene.collection
+        rig = None
+
+        fp = open(fileName, "rU")
+        print( "Reading skeleton" )
+        lineNo = 0
+        for line in fp:
+            words= line.split()
+            lineNo += 1
+            if len(words) == 0:
+                continue
+            key = words[0].upper()
+            if key == 'HIERARCHY':
+                status = Hierarchy
                 ended = False
-            elif key == 'OFFSET':
-                (x,y,z) = (float(words[1]), float(words[2]), float(words[3]))
-                node.offset = scale * Mult2(flipMatrix, Vector((x,y,z)))
-            elif key == 'END':
-                node = CNode(words, node)
-                ended = True
-            elif key == 'CHANNELS':
-                oldmode = None
-                for word in words[2:]:
-                    (index, mode, sign) = channelYup(word)
-                    if mode != oldmode:
-                        indices = []
-                        node.channels.append((mode, indices))
-                        oldmode = mode
-                    indices.append((index, sign))
-            elif key == '{':
-                level += 1
-            elif key == '}':
-                if not ended:
-                    node = CNode(["End", "Site"], node)
-                    node.offset = scale * Mult2(flipMatrix, Vector((0,1,0)))
-                    node = node.parent
+            elif key == 'MOTION':
+                if level != 0:
+                    raise MocapError("Tokenizer out of kilter %d" % level)
+                if scan:
+                    return root
+                amt = bpy.data.armatures.new("BvhAmt")
+                rig = bpy.data.objects.new("BvhRig", amt)
+                coll.objects.link(rig)
+                setActiveObject(context, rig)
+                updateScene()
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.object.mode_set(mode='EDIT')
+                root.build(amt, Vector((0,0,0)), None)
+                #root.display('')
+                bpy.ops.object.mode_set(mode='OBJECT')
+                status = Motion
+                print("Reading motion")
+            elif status == Hierarchy:
+                if key == 'ROOT':
+                    node = CNode(words, None)
+                    root = node
+                    nodes = [root]
+                elif key == 'JOINT':
+                    node = CNode(words, node)
+                    nodes.append(node)
+                    ended = False
+                elif key == 'OFFSET':
+                    (x,y,z) = (float(words[1]), float(words[2]), float(words[3]))
+                    node.offset = self.scale * flipMatrix @ Vector((x,y,z))
+                elif key == 'END':
+                    node = CNode(words, node)
                     ended = True
-                level -= 1
-                node = node.parent
+                elif key == 'CHANNELS':
+                    oldmode = None
+                    for word in words[2:]:
+                        (index, mode, sign) = channelYup(word)
+                        if mode != oldmode:
+                            indices = []
+                            node.channels.append((mode, indices))
+                            oldmode = mode
+                        indices.append((index, sign))
+                elif key == '{':
+                    level += 1
+                elif key == '}':
+                    if not ended:
+                        node = CNode(["End", "Site"], node)
+                        node.offset = self.scale * flipMatrix @ Vector((0,1,0))
+                        node = node.parent
+                        ended = True
+                    level -= 1
+                    node = node.parent
+                else:
+                    raise MocapError("Did not expect %s" % words[0])
+            elif status == Motion:
+                if key == 'FRAMES:':
+                    nFrames = int(words[1])
+                elif key == 'FRAME' and words[1].upper() == 'TIME:':
+                    frameTime = float(words[2])
+                    frameFactor = int(1.0/(scn.render.fps*frameTime) + 0.49)
+                    if self.useDefaultSS:
+                        ssFactor = frameFactor if frameFactor > 0 else 1
+                    self.startFrame *= ssFactor
+                    self.endFrame *= ssFactor
+                    status = Frames
+                    frame = 0
+                    frameno = 1
+
+                    bpy.ops.object.mode_set(mode='POSE')
+                    pbones = rig.pose.bones
+                    for pb in pbones:
+                        pb.rotation_mode = 'QUATERNION'
+            elif status == Frames:
+                if (frame >= self.startFrame and
+                    frame <= self.endFrame and
+                    frame % ssFactor == 0 and
+                    frame < nFrames):
+                    self.addFrame(words, frameno, nodes, pbones, flipMatrix)
+                    showProgress(frameno, frame, nFrames, step=200)
+                    frameno += 1
+                frame += 1
+
+        fp.close()
+        if not rig:
+            raise MocapError("Bvh file \n%s\n is corrupt: No rig defined" % filepath)
+        setInterpolation(rig)
+        time2 = time.perf_counter()
+        endProgress("Bvh file %s loaded in %.3f s" % (filepath, time2-time1))
+        if frameno == 1:
+            print("Warning: No frames in range %d -- %d." % (self.startFrame, self.endFrame))
+        renameBvhRig(rig, filepath)
+        rig.McpIsSourceRig = True
+        return rig
+
+
+    def addFrame(self, words, frame, nodes, pbones, flipMatrix):
+        m = 0
+        first = True
+        flipInv = flipMatrix.inverted()
+        for node in nodes:
+            bname = node.name
+            if bname not in pbones.keys():
+                for (mode, indices) in node.channels:
+                    m += len(indices)
             else:
-                raise MocapError("Did not expect %s" % words[0])
-        elif status == Motion:
-            if key == 'FRAMES:':
-                nFrames = int(words[1])
-            elif key == 'FRAME' and words[1].upper() == 'TIME:':
-                frameTime = float(words[2])
-                frameFactor = int(1.0/(scn.render.fps*frameTime) + 0.49)
-                if defaultSS:
-                    ssFactor = frameFactor if frameFactor > 0 else 1
-                startFrame *= ssFactor
-                endFrame *= ssFactor
-                status = Frames
-                frame = 0
-                frameno = 1
-
-                #source.findSrcArmature(context, rig)
-                bpy.ops.object.mode_set(mode='POSE')
-                pbones = rig.pose.bones
-                for pb in pbones:
-                    pb.rotation_mode = 'QUATERNION'
-        elif status == Frames:
-            if (frame >= startFrame and
-                frame <= endFrame and
-                frame % ssFactor == 0 and
-                frame < nFrames):
-                addFrame(words, frameno, nodes, pbones, scale, flipMatrix)
-                showProgress(frameno, frame, nFrames, step=200)
-                frameno += 1
-            frame += 1
-
-    fp.close()
-    if not rig:
-        raise MocapError("Bvh file \n%s\n is corrupt: No rig defined" % filepath)
-    setInterpolation(rig)
-    time2 = time.clock()
-    endProgress("Bvh file %s loaded in %.3f s" % (filepath, time2-time1))
-    if frameno == 1:
-        print("Warning: No frames in range %d -- %d." % (startFrame, endFrame))
-    renameBvhRig(rig, filepath)
-    rig.McpIsSourceRig = True
-    clearCategory()
-    return rig
-
-#
-#    addFrame(words, frame, nodes, pbones, scale, flipMatrix):
-#
-
-def addFrame(words, frame, nodes, pbones, scale, flipMatrix):
-    m = 0
-    first = True
-    flipInv = flipMatrix.inverted()
-    for node in nodes:
-        name = node.name
-        try:
-            pb = pbones[name]
-        except:
-            pb = None
-        if pb:
-            for (mode, indices) in node.channels:
-                if mode == Location:
-                    vec = Vector((0,0,0))
-                    for (index, sign) in indices:
-                        vec[index] = sign*float(words[m])
-                        m += 1
-                    if first:
-                        pb.location = Mult2(node.inverse, scale * Mult2(flipMatrix, vec) - node.head)
-                        pb.keyframe_insert('location', frame=frame, group=name)
-                    first = False
-                elif mode == Rotation:
-                    mats = []
-                    for (axis, sign) in indices:
-                        angle = sign*float(words[m])*Deg2Rad
-                        mats.append(Matrix.Rotation(angle, 3, axis))
-                        m += 1
-                    mat = Mult3(Mult2(node.inverse, flipMatrix),  Mult3(mats[0], mats[1], mats[2]), Mult2(flipInv, node.matrix))
-                    setRotation(pb, mat, frame, name)
-
-    return
+                pb = pbones[bname]
+                for (mode, indices) in node.channels:
+                    if mode == Location:
+                        vec = Vector((0,0,0))
+                        for (index, sign) in indices:
+                            vec[index] = sign*float(words[m])
+                            m += 1
+                        if first:
+                            pb.location = node.inverse @ (self.scale * flipMatrix @ vec) - node.head
+                            pb.keyframe_insert('location', frame=frame, group=bname)
+                        first = False
+                    elif mode == Rotation:
+                        mats = []
+                        for (axis, sign) in indices:
+                            angle = sign*float(words[m])*D
+                            mats.append(Matrix.Rotation(angle, 3, axis))
+                            m += 1
+                        mat = (node.inverse @ flipMatrix) @ mats[0] @ mats[1] @ mats[2] @ (flipInv @ node.matrix)
+                        insertRotation(pb, mat, frame)
 
 #
 #    channelYup(word):
@@ -397,7 +468,7 @@ def renameBones(srcRig, context):
             trgName = trgName[0]
         eb = ebones[srcName]
         if trgName:
-            if action:
+            if action and srcName in action.groups.keys():
                 grp = action.groups[srcName]
                 grp.name = trgName
             eb.name = trgName
@@ -409,7 +480,7 @@ def renameBones(srcRig, context):
     for (eb, name) in setbones:
         eb.name = name
     #createExtraBones(ebones, trgBones)
-    bpy.ops.object.mode_set(mode='POSE')
+    bpy.ops.object.mode_set(mode='OBJECT')
 
 #
 #    renameBvhRig(srcRig, filepath):
@@ -454,159 +525,206 @@ def deleteSourceRig(context, rig, prefix):
                 act.use_fake_user = False
                 if act.users == 0:
                     bpy.data.actions.remove(act)
-                    del act
-    return
 
 
-#
-#    rescaleRig(scn, trgRig, srcRig):
-#
+def deleteObject(context, ob):
+    if context.object:
+        bpy.ops.object.mode_set(mode='OBJECT')
+    bpy.ops.object.select_all(action='DESELECT')
+    ob.select_set(True)
+    for coll in bpy.data.collections:
+        if ob in coll.objects.values():
+            coll.objects.unlink(ob)
+    bpy.ops.object.delete(use_global=False)
+    del ob
 
-def rescaleRig(scn, trgRig, srcRig):
-    if not scn.McpAutoScale:
-        return
-    if isMhOfficialRig(trgRig):
-        upleg1 = trgRig.data.bones["upperleg01.L"]
-        upleg2 = trgRig.data.bones["upperleg02.L"]
-        trgScale = upleg1.length + upleg2.length
-    else:
-        upleg = getTrgBone('thigh.L', trgRig)
-        trgScale = upleg.length
-    srcScale = srcRig.data.bones['thigh.L'].length
-    scale = trgScale/srcScale
-    print("Rescale %s with factor %f" % (srcRig.name, scale))
-    scn.McpBvhScale = scale
+#----------------------------------------------------------
+#   Renamer
+#----------------------------------------------------------
 
-    bpy.ops.object.mode_set(mode='EDIT')
-    ebones = srcRig.data.edit_bones
-    for eb in ebones:
-        oldlen = eb.length
-        eb.head *= scale
-        eb.tail *= scale
-    bpy.ops.object.mode_set(mode='POSE')
-    adata = srcRig.animation_data
-    if adata is None:
-        return
-    for fcu in adata.action.fcurves:
-        words = fcu.data_path.split('.')
-        if words[-1] == 'location':
-            for kp in fcu.keyframe_points:
-                kp.co[1] *= scale
-    return
+class BvhRenamer(Source, Target):
+    useAutoScale : BoolProperty(
+        name="Auto Scale",
+        description="Rescale skeleton to match target",
+        default=True)
+
+    def draw(self, context):
+        self.layout.prop(context.scene, "McpIncludeFingers")
+        self.layout.separator()
+        Source.draw(self, context)
+        Target.draw(self, context)
+        self.layout.prop(self, "useAutoScale")
+        if not self.useAutoScale:
+            self.layout.prop(self, "scale")
+        self.layout.separator()
 
 
-#
-#    renameAndRescaleBvh(context, srcRig, trgRig):
-#
+    def rescaleRig(self, trgRig, srcRig):
+        if not self.useAutoScale:
+            return
+        upleg1 = getTrgBone("thigh.L", trgRig)
+        upleg2 = getTrgBone("thigh_twist.L", trgRig)
+        if upleg2:
+            trgScale = upleg1.length + upleg2.length
+        else:
+            trgScale = upleg1.length
+        srcScale = srcRig.data.bones["thigh.L"].length
+        scale = trgScale/srcScale
+        print("Rescale %s with factor %f" % (srcRig.name, scale))
+        self.scale = scale
 
-def renameAndRescaleBvh(context, srcRig, trgRig):
-    from . import source, target
-    setCategory("Rename And Rescale")
-    try:
-        if srcRig["McpRenamed"]:
+        bpy.ops.object.mode_set(mode='EDIT')
+        ebones = srcRig.data.edit_bones
+        for eb in ebones:
+            oldlen = eb.length
+            eb.head *= scale
+            eb.tail *= scale
+        bpy.ops.object.mode_set(mode='OBJECT')
+        adata = srcRig.animation_data
+        if adata is None:
+            return
+        for fcu in adata.action.fcurves:
+            words = fcu.data_path.split('.')
+            if words[-1] == 'location':
+                for kp in fcu.keyframe_points:
+                    kp.co[1] *= scale
+
+
+    def renameAndRescaleBvh(self, context, srcRig, trgRig):
+        if srcRig.McpRenamed:
             raise MocapError("%s already renamed and rescaled." % srcRig.name)
-    except:
-        pass
 
-    from . import t_pose
-    scn = context.scene
-    setActiveObject(context, srcRig)
-    #(srcRig, srcBones, action) =  renameBvhRig(rig, filepath)
-    target.getTargetArmature(trgRig, context)
-    source.findSrcArmature(context, srcRig)
-    t_pose.addTPoseAtFrame0(srcRig, scn)
-    renameBones(srcRig, context)
-    setInterpolation(srcRig)
-    rescaleRig(context.scene, trgRig, srcRig)
-    srcRig["McpRenamed"] = True
-    clearCategory()
+        from .t_pose import putInTPose
+
+        scn = context.scene
+        scn.frame_current = 0
+        setActiveObject(context, srcRig)
+        #(srcRig, srcBones, action) =  renameBvhRig(rig, filepath)
+        self.findTarget(context, trgRig)
+        self.findSource(context, srcRig)
+        renameBones(srcRig, context)
+        putInTPose(srcRig, scn.McpSourceTPose, context)
+        setInterpolation(srcRig)
+        self.rescaleRig(trgRig, srcRig)
+        srcRig.McpRenamed = True
+
+#----------------------------------------------------------
+#   Object Problems
+#----------------------------------------------------------
+
+def checkObjectProblems(context):
+    problems = ""
+    epsilon = 1e-2
+    rig = context.object
+
+    eu = rig.rotation_euler
+    if abs(eu.x) + abs(eu.y) + abs(eu.z) > epsilon:
+        problems += "object rotation\n"
+
+    vec = rig.scale - Vector((1,1,1))
+    if vec.length > epsilon:
+        problems += "object scaling\n"
+
+    if problems:
+        msg = ("BVH Retargeter cannot use this rig because it has:\n" +
+               problems +
+               "Apply object transformations before using BVH Retargeter")
+        raise MocapError(msg)
 
 ########################################################################
 #
-#   class MCP_OT_LoadBvh(bpy.types.Operator, LoadBVH):
+#   class MCP_OT_LoadBvh(BvhOperator, MultiFile, BvhFile):
 #
 
-class MCP_OT_LoadBvh(bpy.types.Operator, LoadBVH):
+class MCP_OT_LoadBvh(HideOperator, MultiFile, BvhFile, BvhLoader):
     bl_idname = "mcp.load_bvh"
-    bl_label = "Load BVH File (.bvh)"
+    bl_label = "Load BVH File"
     bl_description = "Load an armature from a bvh file"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        try:
-            readBvhFile(context, self.properties.filepath, context.scene, False)
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        return{'FINISHED'}
+    def draw(self, context):
+        self.layout.prop(self, "scale")
+        BvhLoader.draw(self, context)
+
+    def run(self, context):
+        for filepath in self.getFilePaths():
+            rig = self.readBvhFile(context, filepath, context.scene, False)
+            bpy.ops.object.mode_set(mode='OBJECT')
+            rig.select_set(True)
+            context.view_layer.objects.active = rig
+        print("BVH file(s) loaded")
 
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
 #
-#   class MCP_OT_RenameBvh(bpy.types.Operator):
+#   class MCP_OT_RenameActiveToSelected(BvhOperator):
 #
 
-class MCP_OT_RenameBvh(bpy.types.Operator):
-    bl_idname = "mcp.rename_bvh"
-    bl_label = "Rename And Rescale BVH Rig"
-    bl_description = "Rename bones of active armature and scale it to fit other armature"
+class MCP_OT_RenameActiveToSelected(BvhPropsOperator, IsArmature, TimeScaler, BvhRenamer):
+    bl_idname = "mcp.rename_active_to_selected"
+    bl_label = "Rename Selected From Active"
+    bl_description = "Rename bones of selected (source) armatures and scale it to fit the active (target) armature"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
+    def draw(self, context):
+        BvhRenamer.draw(self, context)
+        TimeScaler.draw(self, context)
+
+    def run(self, context):
         scn = context.scene
-        srcRig = context.object
-        trgRig = None
-        for ob in getSceneObjects(context):
-            if ob.type == 'ARMATURE' and getSelected(ob) and ob != srcRig:
-                trgRig = ob
-                break
-        try:
-            if not trgRig:
-                raise MocapError("No target rig selected")
-            renameAndRescaleBvh(context, srcRig, trgRig)
-            if scn.McpRescale:
-                simplify.rescaleFCurves(context, srcRig, scn.McpRescaleFactor)
-            print("%s renamed" % srcRig.name)
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        return{'FINISHED'}
+        trgRig = context.object
+        for srcRig in context.selected_objects:
+            if srcRig != trgRig and srcRig.type == 'ARMATURE':
+                self.renameAndRescaleBvh(context, srcRig, trgRig)
+                if self.useTimeScale:
+                    self.timescaleFCurves(srcRig)
+                bpy.ops.object.mode_set(mode='OBJECT')
+                print("%s renamed" % srcRig.name)
+        context.view_layer.objects.active = trgRig
+
+    def invoke(self, context, event):
+        from .retarget import ensureInited
+        ensureInited(context.scene)
+        return BvhPropsOperator.invoke(self, context, event)
 
 #
-#   class MCP_OT_LoadAndRenameBvh(bpy.types.Operator, ProblemsString, LoadBVH):
+#   class MCP_OT_LoadAndRenameBvh(HideOperator, ImportHelper, BvhFile):
 #
 
-class MCP_OT_LoadAndRenameBvh(bpy.types.Operator, ProblemsString, LoadBVH):
+class MCP_OT_LoadAndRenameBvh(HideOperator, IsArmature, ImportHelper, BvhFile, BvhLoader, BvhRenamer, TimeScaler):
     bl_idname = "mcp.load_and_rename_bvh"
-    bl_label = "Load And Rename BVH File (.bvh)"
+    bl_label = "Load And Rename BVH File"
     bl_description = "Load armature from bvh file and rename bones"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        from .retarget import changeTargetData, restoreTargetData
-        if self.problems:
-            return{'FINISHED'}
+    def draw(self, context):
+        BvhLoader.draw(self, context)
+        BvhRenamer.draw(self, context)
+        TimeScaler.draw(self, context)
 
+    def prequel(self, context):
+        from .retarget import changeTargetData
+        return changeTargetData(context.object, context.scene)
+
+    def run(self, context):
+        checkObjectProblems(context)
         scn = context.scene
         trgRig = context.object
-        data = changeTargetData(trgRig, scn)
-        try:
-            srcRig = readBvhFile(context, self.properties.filepath, context.scene, False)
-            renameAndRescaleBvh(context, srcRig, trgRig)
-            if scn.McpRescale:
-                simplify.rescaleFCurves(context, srcRig, scn.McpRescaleFactor)
-            print("%s loaded and renamed" % srcRig.name)
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        finally:
-            restoreTargetData(trgRig, data)
-        return{'FINISHED'}
+        srcRig = self.readBvhFile(context, self.properties.filepath, scn, False)
+        self.renameAndRescaleBvh(context, srcRig, trgRig)
+        if self.useTimeScale:
+            self.timescaleFCurves(srcRig)
+        bpy.ops.object.mode_set(mode='OBJECT')
+        srcRig.select_set(True)
+        trgRig.select_set(True)
+        context.view_layer.objects.active = trgRig
+        print("%s loaded and renamed" % srcRig.name)
 
-    def invoke(self, context, event):
-        return problemFreeFileSelect(self, context)
-
-    def draw(self, context):
-        drawObjectProblems(self)
+    def sequel(self, context, data):
+        from .retarget import restoreTargetData
+        restoreTargetData(data)
 
 #----------------------------------------------------------
 #   Initialize
@@ -614,11 +732,14 @@ class MCP_OT_LoadAndRenameBvh(bpy.types.Operator, ProblemsString, LoadBVH):
 
 classes = [
     MCP_OT_LoadBvh,
-    MCP_OT_RenameBvh,
+    MCP_OT_RenameActiveToSelected,
     MCP_OT_LoadAndRenameBvh,
 ]
 
 def initialize():
+
+    bpy.types.Object.McpRenamed = BoolProperty(default = False)
+
     for cls in classes:
         bpy.utils.register_class(cls)
 

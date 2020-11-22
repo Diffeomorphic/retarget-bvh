@@ -1,0 +1,42 @@
+{
+    "name"  : "Endorphin",
+    "url"   : "",
+    "t-pose-file" : "Endorphin",
+    
+    "bones" : {
+        "root" : "hips",
+        "LowerSpineJoint" : "spine",
+        "MiddleSpineJoint" : "spine-1",
+        "UpperSpineJoint" : "chest",
+        "LowerNeckJoint" : "neck",
+        "UpperNeckJoint" : "head", 
+
+        "LeftClavicleJoint" : "shoulder.L",
+        "LeftShoulderJoint" : "upper_arm.L", 
+        "LeftElbowJoint" : "forearm.L",
+        "LeftWristJoint" : "hand.L",
+        "LeftFingersJoint" : "f_index.01.L",
+
+        "RightClavicleJoint" : "shoulder.R",
+        "RightShoulderJoint" : "upper_arm.R", 
+        "RightElbowJoint" : "forearm.R",
+        "RightWristJoint" : "hand.R",
+        "RightFingersJoint" : "f_index.01.R",
+
+        "LeftHipJoint" : "thigh.L",
+        "LeftKneeJoint" : "shin.L",
+        "LeftAnkleJoint" : "foot.L", 
+        "LeftMidFootJoint" : "foot2.L",
+        "LeftToesJoint" : "toe.L",
+
+        "RightHipJoint" : "thigh.R",
+        "RightKneeJoint" : "shin.R",
+        "RightAnkleJoint" : "foot.R", 
+        "RightMidFootJoint" : "foot2.R",
+        "RightToesJoint" : "toe.R"
+    }
+
+}
+
+
+
