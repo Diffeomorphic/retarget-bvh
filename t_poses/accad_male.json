@@ -1,0 +1,28 @@
+{
+    "name" : "ACCAD Male",
+    
+    "t-pose" : {
+        "Hips" : [-98, -8, -63],
+        "ToSpine" : [72, 85, -20],
+        "Spine" : [89, 15, 90],
+        "Spine1" : [0, 0, -2],
+        "Neck" : [0, -179, -4],
+        "Head" : [-29, 94, -14],
+        "LeftShoulder" : [0, -4, 0],
+        "LeftArm" : [-90, -90, 0],
+        "LeftForeArm" : [0, 0, 0],
+        "LeftHand" : [0, 0, 0],
+        "RightShoulder" : [0, -2, 6],
+        "RightArm" : [-22, 91, 66],
+        "RightForeArm" : [0, 0, 0],
+        "RightHand" : [0, 0, 0],
+        "LeftUpLeg" : [8, -74, 91],
+        "LeftLeg" : [0, 0, 0],
+        "LeftFoot" : [0, 0, 0],
+        "LeftToeBase" : [0, 0, 0],
+        "RightUpLeg" : [45, -75, 49],
+        "RightLeg" : [0, 0, 0],
+        "RightFoot" : [0, 0, 0],
+        "RightToeBase" : [0, 0, 0]
+    }
+}

@@ -1,0 +1,42 @@
+{
+    "name"  : "3DS Max",
+    "url"   : "",
+    
+    "bones" : {
+        "Hips" : "hips",
+
+        "LeftHip" : "thigh.L",
+        "LeftKnee" : "shin.L",
+        "LeftAnkle" : "foot.L",
+        "LeftToe" : "toe.L",
+
+        "RightHip" : "thigh.R",
+        "RightKnee" : "shin.R",
+        "RightAnkle" : "foot.R",
+        "RightToe" : "toe.R",
+
+        "LowerBack" : "spine",
+        "Spine-1" : "spine-1",
+        "Chest1" : "chest",
+        "Chest2" : "chest-1",
+        "LowerNeck" : "LowerNeck",
+        "Neck" : "neck",
+        "Head" : "head",
+
+        "LeftCollar" : "shoulder.L",
+        "LeftShoulder" : "upper_arm.L",
+        "LeftElbow" : "forearm.L",
+        "LeftWrist" : "hand.L",
+
+        "RightCollar" : "shoulder.R",
+        "RightShoulder" : "upper_arm.R",
+        "RightElbow" : "forearm.R",
+        "RightWrist" : "hand.R"
+    },
+    
+    "optional" : ["LeftToe", "RightToe"]
+
+}
+
+
+

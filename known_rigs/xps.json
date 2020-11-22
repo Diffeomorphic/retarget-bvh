@@ -1,0 +1,89 @@
+{
+    "name"  : "XPS Xnalara",
+    "url"   : "",
+    "fingerprint" : ["root hips", "arm left shoulder 1"],
+    
+    "bones" : {
+        "root hips" : "hips",
+        "spine lower" : "spine",
+        "spine lower b" : "spine-1",
+        "spine upper" : "chest",
+        "spine upper b" : "chest-1",
+        "head neck lower" : "neck",
+        "head neck upper" : "head", 
+
+        "arm left shoulder 1" : "shoulder.L",
+        "arm left shoulder 2" : "upper_arm.L", 
+        "arm left elbow" : "forearm.L",
+        "arm left wrist" : "hand.L",
+
+        "arm right shoulder 1" : "shoulder.R",
+        "arm right shoulder 2" : "upper_arm.R", 
+        "arm right elbow" : "forearm.R",
+        "arm right wrist" : "hand.R",
+
+        "leg left thigh" : "thigh.L",
+        "leg left knee" : "shin.L",
+        "leg left ankle" : "foot.L", 
+        "leg left toes" : "toe.L",
+
+        "leg right thigh" : "thigh.R",
+        "leg right knee" : "shin.R",
+        "leg right ankle" : "foot.R", 
+        "leg right toes" : "toe.R",
+        
+        "arm left finger 1a" : "f_thumb.01.L",
+        "arm left finger 1b" : "f_thumb.02.L",
+        "arm left finger 1c" : "f_thumb.03.L",
+        
+        "arm left finger 2a" : "f_index.01.L",
+        "arm left finger 2b" : "f_index.02.L",
+        "arm left finger 2c" : "f_index.03.L",
+        
+        "arm left finger 3a" : "f_middle.01.L",
+        "arm left finger 3b" : "f_middle.02.L",
+        "arm left finger 3c" : "f_middle.03.L",
+        
+        "arm left finger 4a" : "f_ring.01.L",
+        "arm left finger 4b" : "f_ring.02.L",
+        "arm left finger 4c" : "f_ring.03.L",
+        
+        "arm left finger 5a" : "f_pinky.01.L",
+        "arm left finger 5b" : "f_pinky.02.L",
+        "arm left finger 5c" : "f_pinky.03.L",    
+            
+        "arm right finger 1a" : "f_thumb.01.R",
+        "arm right finger 1b" : "f_thumb.02.R",
+        "arm right finger 1c" : "f_thumb.03.R",
+        
+        "arm right finger 2a" : "f_index.01.R",
+        "arm right finger 2b" : "f_index.02.R",
+        "arm right finger 2c" : "f_index.03.R",
+        
+        "arm right finger 3a" : "f_middle.01.R",
+        "arm right finger 3b" : "f_middle.02.R",
+        "arm right finger 3c" : "f_middle.03.R",
+        
+        "arm right finger 4a" : "f_ring.01.R",
+        "arm right finger 4b" : "f_ring.02.R",
+        "arm right finger 4c" : "f_ring.03.R",
+        
+        "arm right finger 5a" : "f_pinky.01.R",
+        "arm right finger 5b" : "f_pinky.02.R",
+        "arm right finger 5c" : "f_pinky.03.R"
+
+    },
+
+    "optional" : [
+        "spine lower b",
+        "spine upper b",
+        "arm left finger 1a",
+        "arm right finger 1a"
+    ],
+    
+    "parents" : {
+    }
+}
+
+
+

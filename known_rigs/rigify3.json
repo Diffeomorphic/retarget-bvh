@@ -1,0 +1,151 @@
+{
+    "name"  : "Rigify 3",
+    "url"   : "",
+    "fingerprint" : ["spine_fk.001", "MCH-forearm_ik.L"],
+    
+    "bones" : {
+        "torso" : "hips",
+        "spine_fk.001" : "spine",
+        "spine_fk.002" : "spine-1",
+        "spine_fk.003" : "chest",
+        "spine_fk.004" : "chest-1",
+        "neck" : "neck",
+        "head" : "head", 
+
+        "shoulder.L" : "shoulder.L",
+        "upper_arm_fk.L" : "upper_arm.L", 
+        "forearm_fk.L" : "forearm.L",
+        "hand_fk.L" : "hand.L",
+        
+        "shoulder.R" : "shoulder.R",
+        "upper_arm_fk.R" : "upper_arm.R", 
+        "forearm_fk.R" : "forearm.R",
+        "hand_fk.R" : "hand.R",
+
+        "thigh_fk.L" : "thigh.L",
+        "shin_fk.L" : "shin.L",
+        "foot_fk.L" : "foot.L", 
+        "toe.L" : "toe.L",
+
+        "thigh_fk.R" : "thigh.R",
+        "shin_fk.R" : "shin.R",
+        "foot_fk.R" : "foot.R", 
+        "toe.R" : "toe.R",
+        
+        "thumb.01.L" : "f_thumb.01.L",
+        "thumb.02.L" : "f_thumb.02.L",
+        "thumb.03.L" : "f_thumb.03.L",
+        
+        "f_index.01.L" : "f_index.01.L",
+        "f_index.02.L" : "f_index.02.L",
+        "f_index.03.L" : "f_index.03.L",
+        
+        "f_middle.01.L" : "f_middle.01.L",
+        "f_middle.02.L" : "f_middle.02.L",
+        "f_middle.03.L" : "f_middle.03.L",
+        
+        "f_ring.01.L" : "f_ring.01.L",
+        "f_ring.02.L" : "f_ring.02.L",
+        "f_ring.03.L" : "f_ring.03.L",
+        
+        "f_pinky.01.L" : "f_pinky.01.L",
+        "f_pinky.02.L" : "f_pinky.02.L",
+        "f_pinky.03.L" : "f_pinky.03.L",
+        
+        "thumb.01.R" : "f_thumb.01.R",
+        "thumb.02.R" : "f_thumb.02.R",
+        "thumb.03.R" : "f_thumb.03.R",
+        
+        "f_index.01.R" : "f_index.01.R",
+        "f_index.02.R" : "f_index.02.R",
+        "f_index.03.R" : "f_index.03.R",
+        
+        "f_middle.01.R" : "f_middle.01.R",
+        "f_middle.02.R" : "f_middle.02.R",
+        "f_middle.03.R" : "f_middle.03.R",
+        
+        "f_ring.01.R" : "f_ring.01.R",
+        "f_ring.02.R" : "f_ring.02.R",
+        "f_ring.03.R" : "f_ring.03.R",
+        
+        "f_pinky.01.R" : "f_pinky.01.R",
+        "f_pinky.02.R" : "f_pinky.02.R",
+        "f_pinky.03.R" : "f_pinky.03.R"        
+    },
+
+    "optional" : ["spine_fk.002", "spine_fk.003", "spine_fk.004", "head"],    
+
+    "parents" : {
+        "torso" : "",
+        "spine_fk.001" : "torso",
+        "spine_fk.002" : "spine_fk.001",
+        "spine_fk.003" : "spine_fk.002",
+        "spine_fk.004" : "spine_fk.003",
+        "neck" : "spine_fk.004",
+        "head" : "neck",
+
+        "shoulder.L" : "spine_fk.004",
+        "upper_arm_fk.L" : "shoulder.L", 
+        "forearm_fk.L" : "upper_arm_fk.L",
+        "hand_fk.L" : "forearm_fk.L",
+        
+        "shoulder.R" : "spine_fk.004",
+        "upper_arm_fk.R" : "shoulder.R", 
+        "forearm_fk.R" : "upper_arm_fk.R",
+        "hand_fk.R" : "forearm_fk.R",
+
+        "thigh_fk.L" : "torso",
+        "shin_fk.L" : "thigh_fk.L",
+        "foot_fk.L" : "shin_fk.L", 
+        "toe.L" : "foot_fk.L",
+
+        "thigh_fk.R" : "torso",
+        "shin_fk.R" : "thigh_fk.R",
+        "foot_fk.R" : "shin_fk.R", 
+        "toe.R" : "foot_fk.R",
+        
+        "thumb.01.L" : "hand_fk.L",
+        "thumb.02.L" : "thumb.01.L",
+        "thumb.03.L" : "thumb.02.L",
+        
+        "f_index.01.L" : "hand_fk.L",
+        "f_index.02.L" : "f_index.01.L",
+        "f_index.03.L" : "f_index.02.L",
+        
+        "f_middle.01.L" : "hand_fk.L",
+        "f_middle.02.L" : "f_middle.01.L",
+        "f_middle.03.L" : "f_middle.02.L",
+        
+        "f_ring.01.L" : "hand_fk.L",
+        "f_ring.02.L" : "f_ring.01.L",
+        "f_ring.03.L" : "f_ring.02.L",
+        
+        "f_pinky.01.L" : "hand_fk.L",
+        "f_pinky.02.L" : "f_pinky.01.L",
+        "f_pinky.03.L" : "f_pinky.02.L",
+        
+        "thumb.01.R" : "hand_fk.R",
+        "thumb.02.R" : "thumb.01.R",
+        "thumb.03.R" : "thumb.02.R",
+        
+        "f_index.01.R" : "hand_fk.R",
+        "f_index.02.R" : "f_index.01.R",
+        "f_index.03.R" : "f_index.02.R",
+        
+        "f_middle.01.R" : "hand_fk.R",
+        "f_middle.02.R" : "f_middle.01.R",
+        "f_middle.03.R" : "f_middle.02.R",
+        
+        "f_ring.01.R" : "hand_fk.R",
+        "f_ring.02.R" : "f_ring.01.R",
+        "f_ring.03.R" : "f_ring.02.R",
+        
+        "f_pinky.01.R" : "hand_fk.R",
+        "f_pinky.02.R" : "f_pinky.01.R",
+        "f_pinky.03.R" : "f_pinky.02.R"        
+        
+    }
+}
+
+
+

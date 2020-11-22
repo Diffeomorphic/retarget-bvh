@@ -1,0 +1,95 @@
+{
+    "name"  : "Genesis 3,8",
+    "url"   : "www.daz3d.com",
+    "fingerprint" : ["abdomenLower", "lShldrBend"],
+    
+    "bones" : {
+        "hip" : "hips",
+        "abdomenLower" : "spine",
+        "abdomenUpper" : "spine-1",
+        "chestLower" : "chest",
+        "neckLower" : "neck",
+        "head" : "head", 
+
+        "lCollar" : "shoulder.L",
+        "lShldrBend" : "upper_arm.L", 
+        "lForearmBend" : "forearm.L",
+        "lHand" : "hand.L",
+
+        "rCollar" : "shoulder.R",
+        "rShldrBend" : "upper_arm.R",
+        "rForearmBend" : "forearm.R",
+        "rHand" : "hand.R",
+
+        "lThighBend" : "thigh.L",
+        "lThighTwist" : "thigh_twist.L",
+        "lShin" : "shin.L",
+        "lFoot" : "foot.L", 
+        "lToe" : "toe.L",
+
+        "rThighBend" : "thigh.R",
+        "rShin" : "shin.R",
+        "rFoot" : "foot.R", 
+        "rToe" : "toe.R",
+        
+        "lCarpal1" : "f_carpal1.L",
+        "lCarpal2" : "f_carpal2.L",
+        "lCarpal3" : "f_carpal3.L",
+        "lCarpal4" : "f_carpal4.L",
+        
+        "lThumb1" : "f_thumb.01.L",
+        "lThumb2" : "f_thumb.02.L",
+        "lThumb3" : "f_thumb.03.L",
+        
+        "lIndex1" : "f_index.01.L",
+        "lIndex2" : "f_index.02.L",
+        "lIndex3" : "f_index.03.L",
+        
+        "lMid1" : "f_middle.01.L",
+        "lMid2" : "f_middle.02.L",
+        "lMid3" : "f_middle.03.L",
+        
+        "lRing1" : "f_ring.01.L",
+        "lRing2" : "f_ring.02.L",
+        "lRing3" : "f_ring.03.L",
+        
+        "lPinky1" : "f_pinky.01.L",
+        "lPinky2" : "f_pinky.02.L",
+        "lPinky3" : "f_pinky.03.L",    
+
+        "rCarpal1" : "f_carpal1.R",
+        "rCarpal2" : "f_carpal2.R",
+        "rCarpal3" : "f_carpal3.R",
+        "rCarpal4" : "f_carpal4.R",
+                
+        "rThumb1" : "f_thumb.01.R",
+        "rThumb2" : "f_thumb.02.R",
+        "rThumb3" : "f_thumb.03.R",
+        
+        "rIndex1" : "f_index.01.R",
+        "rIndex2" : "f_index.02.R",
+        "rIndex3" : "f_index.03.R",
+        
+        "rMid1" : "f_middle.01.R",
+        "rMid2" : "f_middle.02.R",
+        "rMid3" : "f_middle.03.R",
+        
+        "rRing1" : "f_ring.01.R",
+        "rRing2" : "f_ring.02.R",
+        "rRing3" : "f_ring.03.R",
+        
+        "rPinky1" : "f_pinky.01.R",
+        "rPinky2" : "f_pinky.02.R",
+        "rPinky3" : "f_pinky.03.R"
+
+    },
+    
+    "optional" : [],
+    
+    "parents" : {
+          "lShin" : "lThighBend"      
+    }
+}
+
+
+

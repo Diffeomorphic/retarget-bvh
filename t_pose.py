@@ -1,19 +1,19 @@
 # ------------------------------------------------------------------------------
 #   BSD 2-Clause License
-#   
-#   Copyright (c) 2019, Thomas Larsson
+#
+#   Copyright (c) 2019-2020, Thomas Larsson
 #   All rights reserved.
-#   
+#
 #   Redistribution and use in source and binary forms, with or without
 #   modification, are permitted provided that the following conditions are met:
-#   
+#
 #   1. Redistributions of source code must retain the above copyright notice, this
 #      list of conditions and the following disclaimer.
-#   
+#
 #   2. Redistributions in binary form must reproduce the above copyright notice,
 #      this list of conditions and the following disclaimer in the documentation
 #      and/or other materials provided with the distribution.
-#   
+#
 #   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 #   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 #   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -26,123 +26,209 @@
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # ------------------------------------------------------------------------------
 
-
-
 import bpy
 from bpy.props import *
+from bpy_extras.io_utils import ImportHelper, ExportHelper
 
 import os
-import math
+from math import sqrt, pi
 from mathutils import Quaternion, Matrix
 from .utils import *
-from .io_json import *
-if bpy.app.version < (2,80,0):
-    from .buttons27 import ProblemsString, LoadJson
-else:
-    from .buttons28 import ProblemsString, LoadJson
+
+#------------------------------------------------------------------
+#   Classes
+#------------------------------------------------------------------
+
+class JsonFile:
+    filename_ext = ".json"
+    filter_glob : StringProperty(default="*.json", options={'HIDDEN'})
+    filepath : StringProperty(name="File Path", description="Filepath to json file", maxlen=1024, default="")
+
+
+class Rigger:
+    autoRig : BoolProperty(
+        name = "Auto Rig",
+        description = "Find rig automatically",
+        default = True)
+
+    def draw(self, context):
+        self.layout.prop(self, "autoRig")
+        if not self.autoRig:
+            scn = context.scene
+            rig = context.object
+            if self.isSourceRig:
+                self.layout.prop(scn, "McpSourceRig")
+                self.layout.prop(scn, "McpSourceTPose")
+            else:
+                self.layout.prop(scn, "McpTargetRig")
+                self.layout.prop(scn, "McpTargetTPose")
+
+    def initRig(self, context):
+        from .target import findTargetArmature
+        from .source import findSourceArmature
+        from .fkik import setRigifyFKIK, setRigify2FKIK
+
+        rig = context.object
+        pose = [(pb, pb.matrix_basis.copy()) for pb in rig.pose.bones]
+
+        if self.isSourceRig:
+            findSourceArmature(context, rig, self.autoRig)
+        else:
+            findTargetArmature(context, rig, self.autoRig)
+
+        for pb,mat in pose:
+            pb.matrix_basis = mat
+
+        if isRigify(rig):
+            setRigifyFKIK(rig, 0.0)
+        elif isRigify2(rig):
+            setRigify2FKIK(rig, 1.0)
+
+        return rig
 
 #------------------------------------------------------------------
 #   Define current pose as rest pose
 #------------------------------------------------------------------
 
-def applyRestPose(context, value):
-    rig = context.object
-    children = []
-    for ob in getSceneObjects(context):
-        if ob.type != 'MESH':
-            continue
-
-        setActiveObject(context, ob)
-        if ob != context.object:
-            raise StandardError("Context switch did not take:\nob = %s\nc.ob = %s\nc.aob = %s" %
-                (ob, context.object, context.active_object))
-
-        if (ob.McpArmatureName == rig.name and
-            ob.McpArmatureModifier != ""):
-            mod = ob.modifiers[ob.McpArmatureModifier]
-            ob.modifiers.remove(mod)
-            ob.data.shape_keys.key_blocks[ob.McpArmatureModifier].value = value
-            children.append(ob)
-        else:
-            for mod in ob.modifiers:
-                if (mod.type == 'ARMATURE' and
-                    mod.object == rig):
-                    children.append(ob)
-                    bpy.ops.object.modifier_apply(apply_as='SHAPE', modifier=mod.name)
-                    ob.data.shape_keys.key_blocks[mod.name].value = value
-                    ob.McpArmatureName = rig.name
-                    ob.McpArmatureModifier = mod.name
-                    break
-
-    setActiveObject(context, rig)
-    bpy.ops.object.mode_set(mode='POSE')
-    bpy.ops.pose.armature_apply()
-    for ob in children:
-        name = ob.McpArmatureModifier
-        setActiveObject(context, ob)
-        mod = ob.modifiers.new(name, 'ARMATURE')
-        mod.object = rig
-        mod.use_vertex_groups = True
-        bpy.ops.object.modifier_move_up(modifier=name)
-        #setShapeKey(ob, name, value)
-
-    setActiveObject(context, rig)
-    print("Applied pose as rest pose")
-
-
-def setShapeKey(ob, name, value):
-    if not ob.data.shape_keys:
-        return
-    skey = ob.data.shape_keys.key_blocks[name]
-    skey.value = value
-
-
-class MCP_OT_RestCurrentPose(bpy.types.Operator):
+class MCP_OT_RestCurrentPose(BvhOperator, IsArmature):
     bl_idname = "mcp.rest_current_pose"
     bl_label = "Current Pose => Rest Pose"
     bl_description = "Change rest pose to current pose"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
+    def run(self, context):
+        rig = context.object
+        children = []
+        for ob in context.view_layer.objects:
+            if ob.type != 'MESH':
+                continue
+
+            setActiveObject(context, ob)
+            if ob != context.object:
+                raise MocapError("Context switch did not take:\nob = %s\nc.ob = %s\nc.aob = %s" %
+                    (ob, context.object, context.active_object))
+
+            if (ob.McpArmatureName == rig.name and
+                ob.McpArmatureModifier != ""):
+                mod = ob.modifiers[ob.McpArmatureModifier]
+                ob.modifiers.remove(mod)
+                ob.data.shape_keys.key_blocks[ob.McpArmatureModifier].value = 1.0
+                children.append(ob)
+            else:
+                for mod in ob.modifiers:
+                    if (mod.type == 'ARMATURE' and
+                        mod.object == rig):
+                        children.append(ob)
+                        bpy.ops.object.modifier_apply(apply_as='SHAPE', modifier=mod.name)
+                        ob.data.shape_keys.key_blocks[mod.name].value = 1.0
+                        ob.McpArmatureName = rig.name
+                        ob.McpArmatureModifier = mod.name
+                        break
+
+        setActiveObject(context, rig)
+        bpy.ops.object.mode_set(mode='POSE')
         try:
-            initRig(context)
-            applyRestPose(context, 1.0)
-            print("Set current pose to rest pose")
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        return{'FINISHED'}
+            bpy.ops.pose.armature_apply()
+        except RuntimeError as err:
+            raise MocapError("Error when applying armature:   \n%s" % err)
+
+        for pb in rig.pose.bones:
+            pb.McpQuat = (1,0,0,0)
+
+        bpy.ops.object.mode_set(mode='OBJECT')
+        for ob in children:
+            name = ob.McpArmatureModifier
+            setActiveObject(context, ob)
+            mod = ob.modifiers.new(name, 'ARMATURE')
+            mod.object = rig
+            mod.use_vertex_groups = True
+            bpy.ops.object.modifier_move_up(modifier=name)
+            if False and ob.data.shape_keys:
+                skey = ob.data.shape_keys.key_blocks[name]
+                skey.value = 1.0
+
+        setActiveObject(context, rig)
+        raise MocapMessage("Applied pose as rest pose")
 
 #------------------------------------------------------------------
 #   Automatic T-Pose
 #------------------------------------------------------------------
 
 TPose = {
-    "upper_arm.L" : (0, 0, -pi/2, 'XYZ'),
-    "forearm.L" :   (0, 0, -pi/2, 'XYZ'),
-    #"hand.L" :      (0, 0, -pi/2, 'XYZ'),
+    "shoulder.L" : (0, 0, -90*D, 'XYZ'),
+    "upper_arm.L" : (0, 0, -90*D, 'XYZ'),
+    "forearm.L" :   (0, 0, -90*D, 'XYZ'),
+    "hand.L" :      (0, 0, -90*D, 'XYZ'),
 
-    "upper_arm.R" : (0, 0, pi/2, 'XYZ'),
-    "forearm.R" :   (0, 0, pi/2, 'XYZ'),
-    #"hand.R" :      (0, 0, pi/2, 'XYZ'),
+    "shoulder.R" : (0, 0, 90*D, 'XYZ'),
+    "upper_arm.R" : (0, 0, 90*D, 'XYZ'),
+    "forearm.R" :   (0, 0, 90*D, 'XYZ'),
+    "hand.R" :      (0, 0, 90*D, 'XYZ'),
 
-    "thigh.L" :     (-pi/2, 0, 0, 'XYZ'),
-    "shin.L" :      (-pi/2, 0, 0, 'XYZ'),
+    "thigh.L" :     (-90*D, 0, 0, 'XYZ'),
+    "shin.L" :      (-90*D, 0, 0, 'XYZ'),
     #"foot.L" :      (None, 0, 0, 'XYZ'),
     #"toe.L" :       (pi, 0, 0, 'XYZ'),
 
-    "thigh.R" :     (-pi/2, 0, 0, 'XYZ'),
-    "shin.R" :      (-pi/2, 0, 0, 'XYZ'),
+    "thigh.R" :     (-90*D, 0, 0, 'XYZ'),
+    "shin.R" :      (-90*D, 0, 0, 'XYZ'),
     #"foot.R" :      (None, 0, 0, 'XYZ'),
     #"toe.R" :       (pi, 0, 0, 'XYZ'),
+
+    "f_carpal1.L": (0, 0, -105*D, 'XYZ'),
+    "f_carpal2.L": (0, 0, -90*D, 'XYZ'),
+    "f_carpal3.L": (0, 0, -75*D, 'XYZ'),
+    "f_carpal4.L": (0, 0, -60*D, 'XYZ'),
+
+    "f_thumb.01.L": (0, 0, -120*D, 'XYZ'),
+    "f_thumb.02.L": (0, 0, -120*D, 'XYZ'),
+    "f_thumb.03.L": (0, 0, -120*D, 'XYZ'),
+    "f_index.01.L": (0, 0, -105*D, 'XYZ'),
+    "f_index.02.L": (0, 0, -105*D, 'XYZ'),
+    "f_index.03.L": (0, 0, -105*D, 'XYZ'),
+    "f_middle.01.L": (0, 0, -90*D, 'XYZ'),
+    "f_middle.02.L": (0, 0, -90*D, 'XYZ'),
+    "f_middle.03.L": (0, 0, -90*D, 'XYZ'),
+    "f_ring.01.L": (0, 0, -75*D, 'XYZ'),
+    "f_ring.02.L": (0, 0, -75*D, 'XYZ'),
+    "f_ring.03.L": (0, 0, -75*D, 'XYZ'),
+    "f_pinky.01.L": (0, 0, -60*D, 'XYZ'),
+    "f_pinky.02.L": (0, 0, -60*D, 'XYZ'),
+    "f_pinky.03.L": (0, 0, -60*D, 'XYZ'),
+
+    "f_carpal1.R": (0, 0, 105*D, 'XYZ'),
+    "f_carpal2.R": (0, 0, 90*D, 'XYZ'),
+    "f_carpal3.R": (0, 0, 75*D, 'XYZ'),
+    "f_carpal4.R": (0, 0, 60*D, 'XYZ'),
+
+    "f_thumb.01.R": (0, 0, 120*D, 'XYZ'),
+    "f_thumb.02.R": (0, 0, 120*D, 'XYZ'),
+    "f_thumb.03.R": (0, 0, 120*D, 'XYZ'),
+    "f_index.01.R": (0, 0, 105*D, 'XYZ'),
+    "f_index.02.R": (0, 0, 105*D, 'XYZ'),
+    "f_index.03.R": (0, 0, 105*D, 'XYZ'),
+    "f_middle.01.R": (0, 0, 90*D, 'XYZ'),
+    "f_middle.02.R": (0, 0, 90*D, 'XYZ'),
+    "f_middle.03.R": (0, 0, 90*D, 'XYZ'),
+    "f_ring.01.R": (0, 0, 75*D, 'XYZ'),
+    "f_ring.02.R": (0, 0, 75*D, 'XYZ'),
+    "f_ring.03.R": (0, 0, 75*D, 'XYZ'),
+    "f_pinky.01.R": (0, 0, 60*D, 'XYZ'),
+    "f_pinky.02.R": (0, 0, 60*D, 'XYZ'),
+    "f_pinky.03.R": (0, 0, 60*D, 'XYZ'),
+
 }
 
 def autoTPose(rig, context):
     print("Auto T-pose", rig.name)
+    scn = context.scene
     putInRestPose(rig, True)
     for pb in rig.pose.bones:
-        try:
+        if pb.McpBone[0:2] == "f_" and not scn.McpIncludeFingers:
+            continue
+        if pb.McpBone in TPose.keys():
             ex,ey,ez,order = TPose[pb.McpBone]
-        except KeyError:
+        else:
             continue
 
         euler = pb.matrix.to_euler(order)
@@ -158,178 +244,146 @@ def autoTPose(rig, context):
 
         loc = pb.bone.matrix_local
         if pb.parent:
-            mat = Mult2(pb.parent.matrix.inverted(), mat)
-            loc = Mult2(pb.parent.bone.matrix_local.inverted(), loc)
-        mat =  Mult2(loc.inverted(), mat)
+            mat = pb.parent.matrix.inverted() @ mat
+            loc = pb.parent.bone.matrix_local.inverted() @ loc
+        mat =  loc.inverted() @ mat
         euler = mat.to_euler('YZX')
         euler.y = 0
         pb.matrix_basis = euler.to_matrix().to_4x4()
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.object.mode_set(mode='POSE')
+        updateScene()
+        setKeys(pb)
 
 #------------------------------------------------------------------
-#   Set current pose to T-Pose
+#   Put in rest and T pose
 #------------------------------------------------------------------
 
-def setTPose(rig, context, filename=None, reload=False):
-    if reload or not rig.McpTPoseDefined:
-        if isMakeHumanRig(rig) and scn.McpMakeHumanTPose:
-            if isMhOfficialRig(rig):
-                filename = "target_rigs/mh_official_tpose.json"
-            else:
-                filename = "target_rigs/makehuman_tpose.json"
-        elif filename is None:
-            filename = rig.McpTPoseFile
-        hasFile = loadPose(rig, filename)
-        if not hasFile:
-            autoTPose(rig, context)
-        defineTPose(rig)
+def putInRestPose(rig, useSetKeys):
+    for pb in rig.pose.bones:
+        pb.matrix_basis = Matrix()
+        if useSetKeys:
+            setKeys(pb)
+    updateScene()
+
+
+def putInRightPose(rig, tpose, context):
+    if tpose != "Default":
+        tinfo = getTPoseInfo(tpose)
+        if tinfo:
+            tinfo.addTPose(rig)
+            putInTPose(rig, tpose, context)
+            return True
     else:
-        getStoredTPose(rig)
+        putInRestPose(rig, True)
+    return False
 
 
-class MCP_OT_SetTPose(bpy.types.Operator):
-    bl_idname = "mcp.set_t_pose"
-    bl_label = "Put In T-pose"
-    bl_description = "Set current pose to T-pose"
+def getStoredTPose(rig, useSetKeys):
+    for pb in rig.pose.bones:
+        quat = Quaternion(pb.McpQuat)
+        pb.matrix_basis = quat.to_matrix().to_4x4()
+        if useSetKeys:
+            setKeys(pb)
+    updateScene()
+
+
+def setKeys(pb):
+    if pb.rotation_mode == "QUATERNION":
+        pb.keyframe_insert("rotation_quaternion", group=pb.name)
+    elif pb.rotation_mode == "AXIS_ANGLE":
+        pb.keyframe_insert("rotation_axis_angle", group=pb.name)
+    else:
+        pb.keyframe_insert("rotation_euler", group=pb.name)
+
+
+def putInTPose(rig, name, context):
+    scn = context.scene
+    if False and rig.McpTPoseDefined:
+        getStoredTPose(rig, True)
+    elif name == "Default":
+        autoTPose(rig, context)
+        print("Put %s in automatic T-pose" % (rig.name))
+    else:
+        info = getTPoseInfo(name)
+        if info is None:
+            raise MocapError("T-pose %s not found" % name)
+        info.addTPose(rig)
+        getStoredTPose(rig, True)
+        print("Put %s in T-pose %s" % (rig.name, name))
+    updateScene()
+
+
+class MCP_OT_PutInSrcTPose(BvhPropsOperator, IsArmature, Rigger):
+    bl_idname = "mcp.put_in_src_t_pose"
+    bl_label = "Put In T-pose (Source)"
+    bl_description = "Put the character into T-pose"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        try:
-            rig = initRig(context)
-            isdefined = rig.McpTPoseDefined
-            setTPose(rig, context, reload=True)
-            rig.McpTPoseDefined = isdefined
-            print("Pose set to T-pose")
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        return{'FINISHED'}
+    isSourceRig = True
+
+    def run(self, context):
+        rig = self.initRig(context)
+        putInTPose(rig, context.scene.McpSourceTPose, context)
+        print("Pose set to source T-pose")
+
+    def invoke(self, context, event):
+        from .source import ensureSourceInited
+        ensureSourceInited(context.scene)
+        return BvhPropsOperator.invoke(self, context, event)
+
+
+class MCP_OT_PutInTrgTPose(BvhPropsOperator, IsArmature, Rigger):
+    bl_idname = "mcp.put_in_trg_t_pose"
+    bl_label = "Put In T-pose (Target)"
+    bl_description = "Put the character into T-pose"
+    bl_options = {'UNDO'}
+
+    isSourceRig = False
+
+    def run(self, context):
+        rig = self.initRig(context)
+        putInTPose(rig, context.scene.McpTargetTPose, context)
+        print("Pose set to target T-pose")
+
+    def invoke(self, context, event):
+        from .target import ensureTargetInited
+        ensureTargetInited(context.scene)
+        return BvhPropsOperator.invoke(self, context, event)
 
 #------------------------------------------------------------------
-#   Set T-Pose
+#   Define and undefine T-Pose
 #------------------------------------------------------------------
 
-def getStoredTPose(rig):
-    for pb in rig.pose.bones:
-        pb.matrix_basis = getStoredBonePose(pb)
-
-
-def getStoredBonePose(pb):
-        try:
-            quat = Quaternion((pb.McpQuatW, pb.McpQuatX, pb.McpQuatY, pb.McpQuatZ))
-        except KeyError:
-            quat = Quaternion()
-        return quat.to_matrix().to_4x4()
-
-
-def addTPoseAtFrame0(rig, scn):
-    from .source import getSourceTPoseFile
-
-    scn.frame_current = 0
-    if rig.McpTPoseDefined:
-        getStoredTPose(rig)
-    elif getSourceTPoseFile():
-        rig.McpTPoseFile = getSourceTPoseFile()
-        defineTPose(rig)
-    else:
-        setRestPose(rig)
-        defineTPose(rig)
-
-    for pb in rig.pose.bones:
-        if pb.rotation_mode == 'QUATERNION':
-            pb.keyframe_insert('rotation_quaternion', group=pb.name)
-        else:
-            pb.keyframe_insert('rotation_euler', group=pb.name)
-
-#------------------------------------------------------------------
-#   Define current pose as T-Pose
-#------------------------------------------------------------------
-
-def defineTPose(rig):
-    for pb in rig.pose.bones:
-        quat = pb.matrix_basis.to_quaternion()
-        pb.McpQuatW = quat.w
-        pb.McpQuatX = quat.x
-        pb.McpQuatY = quat.y
-        pb.McpQuatZ = quat.z
-    rig.McpTPoseDefined = True
-
-
-class MCP_OT_DefineTPose(bpy.types.Operator, ProblemsString):
+class MCP_OT_DefineTPose(BvhOperator, IsArmature):
     bl_idname = "mcp.define_t_pose"
     bl_label = "Define T-pose"
     bl_description = "Define T-pose as current pose"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        if self.problems:
-            return{'FINISHED'}
-        try:
-            rig = initRig(context)
-            defineTPose(rig)
-            print("T-pose defined as current pose")
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        return{'FINISHED'}
-
-    def invoke(self, context, event):
-        return checkObjectProblems(self, context)
-
-    def draw(self, context):
-        drawObjectProblems(self)
-
-#------------------------------------------------------------------
-#   Undefine stored T-pose
-#------------------------------------------------------------------
-
-def setRestPose(rig):
-    unit = Matrix()
-    for pb in rig.pose.bones:
-        pb.matrix_basis = unit
+    def run(self, context):
+        rig = context.object
+        for pb in rig.pose.bones:
+            pb.McpQuat = pb.matrix_basis.to_quaternion()
+        rig.McpTPoseDefined = True
+        print("T-pose defined as current pose")
 
 
-class MCP_OT_UndefineTPose(bpy.types.Operator):
+class MCP_OT_UndefineTPose(BvhOperator, IsArmature):
     bl_idname = "mcp.undefine_t_pose"
     bl_label = "Undefine T-pose"
     bl_description = "Remove definition of T-pose"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        try:
-            rig = initRig(context)
-            rig.McpTPoseDefined = False
-            print("Undefined T-pose")
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        return{'FINISHED'}
+    def run(self, context):
+        rig = context.object
+        rig.McpTPoseDefined = False
+        quat = Quaternion()
+        for pb in rig.pose.bones:
+            pb.McpQuat = quat
+        print("Undefined T-pose")
 
 #------------------------------------------------------------------
 #   Load T-pose from file
 #------------------------------------------------------------------
-
-def loadPose(rig, filename):
-    if filename:
-        filepath = os.path.join(os.path.dirname(__file__), filename)
-        filepath = os.path.normpath(filepath)
-        print("Loading %s" % filepath)
-        struct = loadJson(filepath)
-        rig.McpTPoseFile = filename
-    else:
-        return False
-
-    setRestPose(rig)
-
-    for name,value in struct:
-        bname = getBoneName(rig, name)
-        try:
-            pb = rig.pose.bones[bname]
-        except KeyError:
-            continue
-        quat = Quaternion(value)
-        pb.matrix_basis = quat.to_matrix().to_4x4()
-
-    return True
-
 
 def getBoneName(rig, name):
     if rig.McpIsSourceRig:
@@ -342,21 +396,34 @@ def getBoneName(rig, name):
             return ""
 
 
-class MCP_OT_LoadPose(bpy.types.Operator, LoadJson):
-    bl_idname = "mcp.load_pose"
-    bl_label = "Load Pose"
-    bl_description = "Load pose from file"
+class MCP_OT_LoadTPose(BvhOperator, IsArmature, ExportHelper, JsonFile):
+    bl_idname = "mcp.load_t_pose"
+    bl_label = "Load T-Pose"
+    bl_description = "Load T-pose from file"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        rig = initRig(context)
-        filename = os.path.relpath(self.filepath, os.path.dirname(__file__))
-        try:
-            loadPose(rig, filename)
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
-        print("Loaded pose")
-        return{'FINISHED'}
+    isSourceRig = True
+
+    def run(self, context):
+        from .io_json import loadJson
+        rig = context.object
+        print("Loading %s" % self.filepath)
+        struct = loadJson(self.filepath)
+        rig.McpTPoseFile = self.filepath
+        if "t-pose" in struct.keys():
+            self.setTPose(rig, struct["t-pose"])
+        else:
+            raise MocapError("File does not define a T-pose:\n%s" % self.filepath)
+
+    def setTPose(self, rig, struct):
+        putInRestPose(rig, True)
+        for bname,value in struct.items():
+            if bname in rig.pose.bones.keys():
+                pb = rig.pose.bones[bname]
+                euler = Euler(Vector(value)*D)
+                quat = pb.McpQuat = euler.to_quaternion()
+                pb.matrix_basis = quat.to_matrix().to_4x4()
+                setKeys(pb)
 
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
@@ -366,73 +433,109 @@ class MCP_OT_LoadPose(bpy.types.Operator, LoadJson):
 #   Save current pose to file
 #------------------------------------------------------------------
 
-def savePose(context, filepath):
-    rig = context.object
-    struct = []
-    for pb in rig.pose.bones:
-        bmat = pb.matrix
-        rmat = pb.bone.matrix_local
-        if pb.parent:
-            bmat = Mult2(pb.parent.matrix.inverted(), bmat)
-            rmat = Mult2(pb.parent.bone.matrix_local.inverted(), rmat)
-        mat = Mult2(rmat.inverted(), bmat)
-        q = mat.to_quaternion()
-        magn = math.sqrt( (q.w-1)*(q.w-1) + q.x*q.x + q.y*q.y + q.z*q.z )
-        if magn > 1e-4:
-            if pb.McpBone:
-                struct.append((pb.McpBone, tuple(q)))
-
-    if os.path.splitext(filepath)[1] != ".json":
-        filepath = filepath + ".json"
-    filepath = os.path.join(os.path.dirname(__file__), filepath)
-    print("Saving %s" % filepath)
-    saveJson(struct, filepath)
-
-
-class MCP_OT_SavePose(bpy.types.Operator, LoadJson):
-    bl_idname = "mcp.save_pose"
-    bl_label = "Save Pose"
+class MCP_OT_SaveTPose(BvhOperator, IsArmature, ExportHelper, JsonFile):
+    bl_idname = "mcp.save_t_pose"
+    bl_label = "Save T-Pose"
     bl_description = "Save current pose as .json file"
     bl_options = {'UNDO'}
 
-    def execute(self, context):
-        try:
-            savePose(context, self.filepath)
-        except MocapError:
-            bpy.ops.mcp.error('INVOKE_DEFAULT')
+    onlyMcpBones : BoolProperty(
+        name = "Only Mcp Bones",
+        default = False,
+    )
+
+    def draw(self, context):
+        self.layout.prop(self, "onlyMcpBones")
+
+    def run(self, context):
+        from collections import OrderedDict
+        from .io_json import saveJson
+        rig = context.object
+        tstruct = OrderedDict()
+        struct = OrderedDict()
+        fname = os.path.splitext(os.path.basename(self.filepath))[0]
+        words = [word.capitalize() for word in fname.split("_")]
+        struct["name"] = " ".join(words)
+        struct["t-pose"] = tstruct
+        for pb in rig.pose.bones:
+            bmat = pb.matrix
+            rmat = pb.bone.matrix_local
+            if pb.parent:
+                bmat = pb.parent.matrix.inverted() @ bmat
+                rmat = pb.parent.bone.matrix_local.inverted() @ rmat
+            mat = rmat.inverted() @ bmat
+            q = mat.to_quaternion()
+            magn = math.sqrt( (q.w-1)*(q.w-1) + q.x*q.x + q.y*q.y + q.z*q.z )
+            if magn > -1e-4:
+                if pb.McpBone or not self.onlyMcpBones:
+                    euler = Vector(mat.to_euler())/D
+                    tstruct[pb.name] = [int(round(ex)) for ex in euler]
+
+        if os.path.splitext(self.filepath)[-1] != ".json":
+            filepath = self.filepath + ".json"
+        else:
+            filepath = self.filepath
+        filepath = os.path.join(os.path.dirname(__file__), filepath)
+        print("Saving %s" % filepath)
+        saveJson(struct, filepath)
         print("Saved current pose")
-        return{'FINISHED'}
 
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
-#------------------------------------------------------------------
-#   Utils
-#------------------------------------------------------------------
+#----------------------------------------------------------
+#   Global T-pose
+#----------------------------------------------------------
 
-def initRig(context):
-    from . import target
-    from . import source
-    from .fkik import setRigifyFKIK, setRigify2FKIK
+from .source import CRigInfo
 
-    rig = context.object
-    pose = [(pb, pb.matrix_basis.copy()) for pb in rig.pose.bones]
+class CTPoseInfo(CRigInfo):
+    verboseString = "Read T-pose file"
 
-    if rig.McpIsSourceRig:
-        source.findSrcArmature(context, rig)
+_tposeInfos = {}
+_activeTPoseInfo = None
+
+def getTPoseInfo(name):
+    global _tposeInfos
+    if name in _tposeInfos.keys():
+        return _tposeInfos[name]
     else:
-        target.getTargetArmature(rig, context)
+        return None
 
-    for pb,mat in pose:
-        pb.matrix_basis = mat
 
-    if isRigify(rig):
-        setRigifyFKIK(rig, 0.0)
-    elif isRigify2(rig):
-        setRigify2FKIK(rig, 1.0)
+def initTPoses(scn):
+    global _tposeInfos
 
-    return rig
+    _tposeInfos = { "Default" : CTPoseInfo(scn) }
+    keys = []
+    folder = os.path.join(os.path.dirname(__file__), "t_poses")
+    for fname in os.listdir(folder):
+        filepath = os.path.join(folder, fname)
+        if os.path.splitext(fname)[-1] == ".json":
+            info = CTPoseInfo(scn)
+            info.readFile(filepath)
+            _tposeInfos[info.name] = info
+            keys.append(info.name)
+    enums = []
+    keys.sort()
+    keys = ["Default"] + keys
+    for key in keys:
+        enums.append((key,key,key))
+
+    bpy.types.Scene.McpSourceTPose = EnumProperty(
+        items = enums,
+        name = "TPose Source",
+        default = 'Default')
+    scn.McpSourceTPose = 'Default'
+
+    bpy.types.Scene.McpTargetTPose = EnumProperty(
+        items = enums,
+        name = "TPose Target",
+        default = 'Default')
+    scn.McpTargetTPose = 'Default'
+
+    print("T-poses initialized")
 
 #----------------------------------------------------------
 #   Initialize
@@ -440,14 +543,22 @@ def initRig(context):
 
 classes = [
     MCP_OT_RestCurrentPose,
-    MCP_OT_SetTPose,
-    MCP_OT_DefineTPose,
-    MCP_OT_UndefineTPose,
-    MCP_OT_LoadPose,
-    MCP_OT_SavePose,
+    MCP_OT_PutInSrcTPose,
+    MCP_OT_PutInTrgTPose,
+    #MCP_OT_DefineTPose,
+    #MCP_OT_UndefineTPose,
+    MCP_OT_LoadTPose,
+    MCP_OT_SaveTPose,
 ]
 
 def initialize():
+    bpy.types.Object.McpTPoseDefined = BoolProperty(default = False)
+    bpy.types.Object.McpTPoseFile = StringProperty(default = "")
+    bpy.types.Object.McpArmatureName = StringProperty(default = "")
+    bpy.types.Object.McpArmatureModifier = StringProperty(default = "")
+    bpy.types.PoseBone.McpQuat = FloatVectorProperty(size=4, default=(1,0,0,0))
+    bpy.types.Object.McpIsSourceRig = BoolProperty(default=False)
+
     for cls in classes:
         bpy.utils.register_class(cls)
 
